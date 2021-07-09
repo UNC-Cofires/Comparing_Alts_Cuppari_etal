@@ -278,18 +278,18 @@ def BPA_net_rev(contract,df_payout,loading,v,redux=0,other='std'):
     Results_d=pd.DataFrame(np.stack([BPA_rev_d[0],PF_rev[0],IP_rev[0],P[0],SS[0],BPA_hydro[0],PF_load[0],IP_load[0],SD[0],BPA_res[0],Wholesale_Mkt['MidC'],Wholesale_Mkt['CAISO']],axis=1),
                            columns=['Rev_gross','PF_rev','IP_rev','P','SS','BPA_hydro','PF_load','IP_load','Surplus/Deficit','BPA_resources','MidC','CAISO' ])
 
-    with pd.ExcelWriter('E://Research//PhD//BPA//Results//BPA_net_rev_stoc_d_'+str(contract)+str(v)+str(other)+'.xlsx' ) as writer:
+    with pd.ExcelWriter('Results//BPA_net_rev_stoc_d_'+str(contract)+str(v)+str(other)+'.xlsx' ) as writer:
         Results_d.to_excel(writer, sheet_name='Results_d')
         for e in range (1,60):
             Result_ensembles_d['ensemble' + str(e)].to_excel(writer, sheet_name='ensemble' + str(e))
 
-    with pd.ExcelWriter('E://Research//PhD//BPA//Results//BPA_net_rev_stoc_y_'+str(contract)+str(v)+str(other)+'.xlsx' ) as writer:
+    with pd.ExcelWriter('Results//BPA_net_rev_stoc_y_'+str(contract)+str(v)+str(other)+'.xlsx' ) as writer:
         for e in range (1,60):
             Result_ensembles_y['ensemble' + str(e)].to_excel(writer, sheet_name='ensemble' + str(e))
         #pd.DataFrame(costs_y).to_excel(writer,sheet_name='Costs_y')
 
-    BPA_rev_d.to_csv('E://Research//PhD//BPA//Results//daily_net_rev_'+str(contract)+str(v)+str(other)+'.csv')
-    BPA_Net_rev_y.to_csv('E://Research//PhD//BPA//Results//ann_net_rev_'+str(contract)+str(v)+str(other)+'.csv')
+    BPA_rev_d.to_csv('Results//daily_net_rev_'+str(contract)+str(v)+str(other)+'.csv')
+    BPA_Net_rev_y.to_csv('Results//ann_net_rev_'+str(contract)+str(v)+str(other)+'.csv')
 
     return None
 
