@@ -531,4 +531,3 @@ dyn, dyn_repaid = net_rev_full_inputs(df_payout, custom_redux = 0, name = 'avg',
 #sns.kdeplot(infinite.iloc[:,0], label = 'infinite', fill = True, alpha = .5)
 #sns.kdeplot(avg.iloc[:,0], label = 'avg', fill = True, alpha = .5)
 #plt.legend()
-
