@@ -32,10 +32,14 @@ from sklearn import linear_model
 ## df needs to have the net payment to BPA from counterparty (i.e. positive when below tda strike and negative 
 ## when above the strike)
 ## note: when using marginal price to scale payments, don't want to use v :) 
-def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y = 2018, infinite = False, 
-                        reserve_fund = False, p = 10, p2 = 32):
-    #Set Preference Customers reduction percent (number)
-            
+def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y = 2018, 
+                        infinite = False, reserve_fund = False, cost_inc = 0):    #Set Preference Customers reduction percent (number) as custom_redux 
+       
+    p = 10  # percent surplus that goes to reserve
+    p2 = 32  # percent surplus that goes to debt opt
+    d = 1
+    e = 1
+    
     # Yearly firm loads (aMW)
     df_load=pd.read_excel('net_rev_data.xlsx',sheet_name='load',skiprows=[0,1])#, usecols=[12]) ## column 12 = 2021
     PF_load_y = df_load.loc[13, y] - custom_redux*df_load.loc[13 ,y]
@@ -102,6 +106,10 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     Wind = pd.DataFrame(Wind_y*wind_ratio)
     Nuc = pd.DataFrame(data=np.ones(len(Wind))*Nuc_y, index=Wind.index)
     
+    ##ratio for overall generation (used for exchange resources)
+    gen = BPA_hydro+Wind+Purch+Nuc
+    gen_ratio = gen/gen.mean()
+    
     # STOCHASTIC MIdC and California daily prices
     MidC=pd.read_csv('CAPOW_data/MidC_daily_prices_new.csv').iloc[:, 1:]
     MidC=MidC.iloc[:,0]
@@ -124,7 +132,39 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     ExR=0.71
     TA=1000
 
-    ##Calculate revenue
+    # read in other necessary data
+    system_cost=pd.read_excel('rate_calc_data.xlsx', sheet_name='COSA')
+    loads = pd.read_excel('rate_calc_data.xlsx', sheet_name='Load', header = 2)
+    #sales=pd.read_excel('Hist_data/rate_calc_data.xlsx',sheet_name='Second_sales')
+    
+    exch_load_all=pd.read_excel('rate_calc_data.xlsx',sheet_name='Exchange_Load')
+    rate_protect=pd.read_excel('rate_calc_data.xlsx',sheet_name='Rate_Protect') 
+    unconstrained_ben=pd.read_excel('rate_calc_data.xlsx',sheet_name='Base_Ex_Cost')
+    sd_alloc_all=pd.read_excel('rate_calc_data.xlsx',sheet_name='SD_cost_alloc')
+    delta=pd.read_excel('rate_calc_data.xlsx',sheet_name ='IP_PF_delta')
+
+    ##know existing resource capacity
+    resources=pd.read_excel('rate_calc_data.xlsx',sheet_name='Resources')
+    
+    ##assume FBS resource will always be allocated to PF
+    ##but give indus/surp some new 
+    indus_nr = resources.loc[18,y]
+    surp_nr = resources.loc[20,y]
+    exch_res = resources.loc[1,y]
+
+    ##benefits from the sale of energy (assume average) 
+    unconstrained_ben = pd.read_excel('rate_calc_data.xlsx',sheet_name = 'Base_Ex_Cost')
+    uncon_ben = unconstrained_ben.loc[9,y]*1000 
+    rate_protect = pd.read_excel('rate_calc_data.xlsx',sheet_name = 'Rate_Protect') 
+    rate_protect18 = rate_protect.loc[2,y]*1000 
+    sd_alloc = sd_alloc_all.loc[0,y]*1000 ##surplus/deficit allocation ##FIX THIS???
+
+    ##initialize any new DFs
+    ## will want to recalculate every 2 years, ie every rate period
+    unbif_rate = pd.DataFrame(index=range(0,1189)) ##these are average rates - not split into HLH or LLH
+    bif_rate = pd.DataFrame(index=range(0,1189)) ##these are average rates - not split into HLH or LLH
+    PF_costs = pd.DataFrame(index=range(0,1189))
+
     start = pd.read_excel('net_rev_data.xlsx', sheet_name='res_ba')
 
     if reserve_fund == False: 
@@ -133,11 +173,10 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
         start_res = reserve_fund * pow(10,6)
     starting_BA = start.loc[1, y]*pow(10,9)
     new_BA = 0 
-    ## NEED TO ADD CONDITION THAT IF INFINITE, EXPAND BA AS NEEDED 
-    ## AND ALSO TRACK EXPANSIONS 
-       
-    Treas_fac1 = 320*pow(10,6)   # Treasury facility (1)
-    Treas_fac2 = 430*pow(10,6)   # Treasury facility (2)
+
+    ## $320 is the in year liquidity required for power 
+    Treas_fac1 = 320*pow(10,6)   # Treasury facility (1) -- avail for within year liquidity 
+    Treas_fac2 = 430*pow(10,6)   # Treasury facility (2) -- according to power + transmission risk study, avail for year-to-year
     trans_BA = 9.782*pow(10,6)*0.4 #40 percent contribution to BA from transmission line
     Used_TF = 0
     Used_TF2 = pd.DataFrame(index=np.arange(1, length))
@@ -152,12 +191,36 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     PF_load['month'] = months
     IP_load['month'] = months
 
-    #initialize
+    PF_load_ann=pd.DataFrame(index=range(0, length), columns=['annual'])
+    IP_load_ann=pd.DataFrame(index=range(0, length), columns=['annual'])
+#    tot_load_ann=pd.DataFrame(index=range(0, length), columns=['annual'])
+    SS_ann=pd.DataFrame(index=range(0, length), columns=['annual'])
+    SD_ann=pd.DataFrame(index=range(0, length), columns=['annual'])
+    P_ann=pd.DataFrame(index=range(0, length))
+    
 
+    # for rate design purposes, BPA always uses 1937 water conditions, so use that as 
+    # the resources available
+    # calculate own allocations, use historical Mid C prices 
+
+    loads=pd.read_excel('rate_calc_data.xlsx',sheet_name=3)
+    sd_alloc_all=pd.read_excel('rate_calc_data.xlsx',sheet_name=10)
+
+    count=0
+    hours=8760
+    ##currently only calculate annual rates, so just using a ratio to approximate monthly differences 
+    mon_ratio=pd.DataFrame(index=range(1,12))
+    for i in range(0,12):
+        mon_ratio.loc[i,0]=(PF_rates.iloc[i,1])/PF_rates.loc[i,y].mean()
+
+    mon_ratio['month']=PF_rates['month']
+    mon_ratio.columns=['ratio','month']
+
+    #initialize standard stuff 
     BPA_rev_d = pd.DataFrame(index = PF_load.index)
     BPA_Net_rev_y = pd.DataFrame(index = np.arange(1, length))
     PF_rev = pd.DataFrame(index = PF_load.index)
-    IP_rev = pd.DataFrame(index = IP_load.index)
+    IP_rev = pd.DataFrame(index = IP_load.index, columns = ['rev'])
     P = pd.DataFrame(index = SD.index)
     SS = pd.DataFrame(index = SD.index)
     Reserves = pd.DataFrame(index = np.arange(1, length))
@@ -183,10 +246,6 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     Result_ensembles_y = {} 
     Result_ensembles_d = {} 
 
-#    p = 30  # percent surplus that goes to reserve
-#    p2 = 32  # percent surplus that goes to debt opt
-    d = 1
-    e = 1
 
     def calculate_CRAC(NR_, tot_load, name):
         if NR_ > 5*pow(10,6):  
@@ -202,14 +261,25 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
         return X      
     
     for i in SD.index:
+            print(i)
+            if i <366:
+        #daily simulation
+        # Calculate revenue from Obligations
+                RatePF = (PF_rates[str(y)][PF_rates['month']==months[i,0]].values)[0]
+                #RatePF += CRAC
+                PF_rev.loc[i,0] = PF_load.loc[i,0]*RatePF*24
+                RateIP = (IP_rates[str(y)][IP_rates['month']==months[i,0]].values)[0]
+                RateIP += CRAC
+                IP_rev.iloc[i,0] = IP_load.loc[i,0]*RateIP*24
+        
             #daily simulation
             # Calculate revenue from Obligations
-            RatePF = PF_rates[str(y)][PF_rates['month']==months[i,0]].values 
-            RatePF += CRAC
-            PF_rev.loc[i,0] = PF_load.loc[i,0]*RatePF*24
-            RateIP = IP_rates[str(y)][IP_rates['month']==months[i,0]].values 
-            RateIP += CRAC
-            IP_rev.loc[i,0] = IP_load.loc[i,0]*RateIP*24
+#            RatePF = PF_rates[str(y)][PF_rates['month']==months[i,0]].values 
+#            RatePF += CRAC
+#            PF_rev.loc[i,0] = PF_load.loc[i,0]*RatePF*24
+#            RateIP = IP_rates[str(y)][IP_rates['month']==months[i,0]].values 
+#            RateIP += CRAC
+#           IP_rev.loc[i,0] = IP_load.loc[i,0]*RateIP*24
         
         # Calculate Surplus/Deficit revenue
             if SD.loc[i,0] < 0:
@@ -225,9 +295,10 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
                     else:
                         Ex = 0
                     SS.loc[i,0] = ExR*(Ex* Wholesale_Mkt.loc[i,'CAISO']*24) + (SD.loc[i,0]-Ex)*Wholesale_Mkt.loc[i,'MidC']*24
-            BPA_rev_d.loc[i,0] = PF_rev.loc[i,0] + IP_rev.loc[i,0] + SS.loc[i,0] + P.loc[i,0]
+            BPA_rev_d.loc[i,0] = PF_rev.loc[i,0] + IP_rev.iloc[i,0] + SS.loc[i,0] + P.loc[i,0]
          #   print(BPA_rev_d.loc[i,0])
-        #yearly simulation
+         
+        # yearly simulation
             if ((i+1)/365).is_integer():
                 year = int((i+1)/365)
                 print(str(name) + '_' + str(year))
@@ -236,26 +307,35 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
                 IP_load_i = IP_load.iloc[(year-1)*365:year*365,0].sum()
                 tot_load_i = PF_load_i + IP_load_i
                 BPA_Net_rev_y.loc[year,0] = (BPA_rev_d.loc[i-364:i,0]).sum() + df_payout[year-1] - costs_y[year-1]
+                               
+                
                # print(BPA_Net_rev_y.loc[year,0])
                 ## when have negative net revenues
                 if int(BPA_Net_rev_y.loc[year,0]<0):
                     losses = -BPA_Net_rev_y.loc[year,0]
                     ## try to use reserves to cover it (Res avail - absolute(losses))
-                    Net_res1= Reserves.loc[year,0] - losses
+                    ## so, net_res1 > 0 means reserves were sufficient
+                    Net_res1 = Reserves.loc[year,0] - losses
+                    ## net reserves = actual reserves minus TF, which is counted as reserves
+                    ## so basically just the additional reserves (power & transmission risk study)
+                    
                     ## reserves for next year set at 0 or, if there were enough reserves to cover
                     ## document the remainder of reserves 
                     Reserves.loc[year+1,0] = max(Net_res1, 0)
+                    
                     ## when reserves < losses... 
                     if int(Net_res1 < 0):
+                        
                         ## the thus far uncovered losses are the difference
-                        losses=-Net_res1
-                        #if there is BA AND TF
+                        losses = - Net_res1
+                        
+                        ## if there is any liquidity (i.e. there is enough BA
+                        ## to contribute to TF)
                         if (Remaining_BA.loc[year,0] - Used_TF) > 750*pow(10,6): 
-                            ## losses here are a positive number (abs value) 
                             ## next year's TF is set to the minimum of losses 
                             ## or $320M (TF1) minus this year's existing TF
                             ## bol is because it is replenished every two years
-                            TF.loc[year+1,'TF1'] = min(losses, Treas_fac1-TF.TF1[year]*bol)
+                            TF.loc[year+1,'TF1'] = min(losses, Treas_fac1 - TF.TF1[year]*bol)
                             
                             ## note how much of the TF is used 
                             Used_TF += TF.loc[year+1,'TF1']
@@ -279,18 +359,16 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
                             #set max crac as +5$/MWh per ensemble
                             CRAC=min(CRAC, 5)
                             TTP.loc[year]=losses
-                               
-                else:## when net revs > 0 
+                             
+
+
+                else:
                     ## $608,691,000 is the Reserves cap
-                    ## subtract TF1 because TF1 is part of the "cash on hand" and considered part of reserves
-                    if reserve_fund == True: 
-                        Reserves.loc[year+1,0] = max(Reserves.loc[year,0] + 0.01*p*BPA_Net_rev_y.loc[year,0], 608691000-Treas_fac1) 
-                    else: # reserve_fund == False:
-                        Reserves.loc[year+1,0] = min(Reserves.loc[year,0] + 0.01*p*BPA_Net_rev_y.loc[year,0], 608691000-Treas_fac1) 
-                    
-                    print(Reserves.loc[year+1,0])
+                    ## subtract TF1 because TF1 is part of the "cash on hand"
+                    Reserves.loc[year+1,0] = min(Reserves.loc[year,0] + 0.01*p*BPA_Net_rev_y.loc[year,0], 608691000-Treas_fac1) 
                     #Total_TF+= min(0.01*p*BPA_Net_rev_y.loc[year,0], pow(10,9))  #debt optimization
                     #print('Debt optimization, added: ' + str( 0.01*p*BPA_Net_rev_y.loc[year,0]))
+                
                 CRAC_y.loc[year+1]=CRAC
                 ## a minimum of $484 M goes to reserves, with the debt optimization that 1% * p2 * net revenue goes to TP 
                 ## .01 is just for the post processing units sake ('000s instead of M) 
@@ -309,7 +387,87 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
                     new_BA_y.loc[year+1,0] = 2*pow(10,9)
                 else: 
                     new_BA_y.loc[year+1,0] = 0
-                    
+ 
+                FBS_res = BPA_res.iloc[(year-1)*365:year*365,0].sum()
+                
+#               PF_load_ann.iloc[(year),0] = PF_load_i/365
+                SS_ann.iloc[year,0] = SS.iloc[(year-1)*365:year*365,0].sum()
+                SD_ann.iloc[year,0] = SD.iloc[(year-1)*365:year*365,0].sum()
+                surp_load = SD.iloc[(year-1)*365:year*365,0].sum()
+                P_ann.loc[year,0] = P.iloc[(year-1)*365:year*365,0].sum()
+                ET_load_ann = ET_load.iloc[(year-1)*365:year*365,0].sum()
+                
+                tot_PF = PF_load_i + ET_load_ann.sum()
+                tot_load_ann = tot_PF + IP_load_i + SS_ann.iloc[year,0] 
+                
+                ##different customer groups are given "allocations" for the various costs 
+                num_FBS_PF = min(tot_PF, FBS_res)
+                deno_FBS_PF = (num_FBS_PF + indus_nr + surp_nr)
+    
+                exch_num=min(tot_PF - PF_load_i, FBS_res)     
+                exch_res_IP=(exch_res + FBS_res - exch_num - num_FBS_PF)*IP_load_i/(IP_load_i+surp_load)
+    
+#                sales_mw = sales.loc[1,year] this is SS
+                ##calculate allocations
+                alloc_FBSNR = num_FBS_PF/deno_FBS_PF ##base system
+                alloc_ER = ET_load_ann/exch_res ##exchange resources 
+                alloc_cons = tot_PF/tot_load_ann ##conservation
+
+                alloc_sd = tot_PF/(tot_load_ann - surp_load) ##surplus deficit
+                alloc_IP_FBSNR = indus_nr/(indus_nr + surp_nr + PF_load_i)
+                alloc_IP_ER = exch_res_IP/exch_res
+                alloc_IP_cons = IP_load_i/(IP_load_i + tot_PF + surp_load)
+                alloc_IP_nr = indus_nr/(indus_nr+surp_nr)
+#                alloc_IP_sd = 1-alloc_sd
+#                alloc_IP_rp = IP_load/(ET_load_ann + IP_load_i + surp_load + SD_ann.iloc[year,0])
+    
+                ##benefits from the sale of energy (assume average) 
+#                uncon_ben = unconstrained_ben.loc[9,y]
+                rate_protect2 = rate_protect.loc[2,y]
+                sd_alloc = sd_alloc_all.loc[0,y] ##surplus/deficit allocation
+                ##now take their yly cost and divide by total PF load
+                PF_costs = (system_cost.loc[0,y]+system_cost.loc[1,y])*alloc_FBSNR+(system_cost.loc[2,y]-system_cost.loc[5,y])*alloc_ER+system_cost.loc[3,y]*alloc_cons+sd_alloc-SS_ann.iloc[year,0]*alloc_FBSNR
+                        
+                IP_costs = system_cost.loc[1,y]*alloc_IP_nr+(system_cost.loc[2,y]-system_cost.loc[5,y])*alloc_IP_ER+system_cost.loc[3,y] *alloc_IP_cons+system_cost.loc[4,y]*alloc_IP_cons-SS_ann.iloc[year,0]*alloc_IP_FBSNR#delta.loc[0,year] ##no allocation for FBS
+                ##remove transmission costs from exchange 
+                ##the first step is to get the unbifurcated PF (average)
+                unbif_rate.loc[year,0] = PF_costs/(tot_PF*(hours/1000))
+                
+                ##adjust PF costs
+                ##benefits from the sale of energy (assume average) 
+                adj_PF_costs = (PF_costs*PF_load_i/(tot_PF))-rate_protect2
+                ##have simplified - skipped WP-10 step and rate links
+                
+                bif_rate.loc[year,0] = adj_PF_costs/(PF_load_i*hours/1000)
+                print(year)
+    
+                RatePF = bif_rate.iloc[year,0]*mon_ratio['ratio'][mon_ratio['month']==months[i,0]].values
+                PF_rev.loc[year,0]=PF_load.loc[year,0]*RatePF[0]*24
+                RateIP = bif_rate.iloc[year]*1.19*mon_ratio['ratio'][mon_ratio['month']==months[i,0]].values
+                IP_rev.loc[year,0] = IP_load.iloc[year,0]*RateIP[0]*24
+            
+                if year%20 == 0:
+                    ##now take their yearly cost and divide by total PF load
+                    PF_costs = ((system_cost.loc[0,y]+system_cost.loc[1,y])*alloc_FBSNR+(system_cost.loc[2,y]-system_cost.loc[5,y])*alloc_ER+system_cost.loc[3,y]*alloc_cons)*1000+ losses*alloc_FBSNR-(SS_ann.iloc[year,0]+P_ann.iloc[year,0])*alloc_FBSNR+sd_alloc*alloc_sd
+                    ##costs are in billions: full number
+                    count=0
+                else: 
+                    ## now take their yearly cost and divide by total PF load
+                    ## removed sd alloc
+                    PF_costs = ((system_cost.loc[0,y]+system_cost.loc[1,y])*alloc_FBSNR+(system_cost.loc[2,y]-system_cost.loc[5,y])*alloc_ER + system_cost.loc[3,y]*alloc_cons)*1000*(1+cost_inc)**count + losses*alloc_FBSNR-(SS_ann.iloc[year,0]+P_ann.iloc[year,0])*alloc_FBSNR+sd_alloc*alloc_sd
+                    ##costs are in billions: full number 
+                    count = count+1
+                
+                        ##the first step is to get the unbifurcated PF (average)
+                  
+                    ##adjust PF costs
+                adj_PF_costs = (PF_costs*PF_load_ann.iloc[year,0]/(tot_PF))-rate_protect18
+                ##have simplified - skipped WP-10 step and rate links
+                bif_rate.loc[year,0] = adj_PF_costs/(PF_load_i/365*hours)
+                print(bif_rate.loc[year,0])
+                bif_rate.loc[year,1] = count
+                        
+    
                 #ensembles     
                 if year%20 == 0:
                     Result_ensembles_y['ensemble' + str(e)] = pd.DataFrame(data= np.stack([Reserves.loc[year-19:year,0],TTP.loc[year-19:year,'TTP'],
@@ -359,16 +517,15 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
 
 
 df_payout = [0]*1200
-#avg, avg_repaid = net_rev_full_inputs(df_payout, custom_redux = 0, name = 'avg', y = 'AVERAGE', infinite = False)
+#avg, avg_repaid = net_rev_full_inputs(df_payout, custom_redux = 0, name = 'avg', y = 'AVERAGE', infinite = False, excel = False)
 #og, og_repaid = net_rev_full_inputs(df_payout, custom_redux = 0, name = 'og2', excel = False, y = 2018, infinite = False)
 #update = net_rev_full_inputs(df_payout, custom_redux = 0, name = '2021update', excel = True, y = 2022)
 #infinite, infinite_repaid = net_rev_full_inputs(df_payout, custom_redux = 0, name = 'infinite', excel = True, y = 'AVERAGE', infinite = True)
 #avg_ba = net_rev_full_inputs(df_payout, name = 'avg_ba', y = 'AVERAGE', infinite = True)
 #high_res, high_res_repaid = net_rev_full_inputs(df_payout, custom_redux = 0, name = 'high_res_500', y = 'AVERAGE', infinite = False, excel = True, reserve_fund = 500)
-high_res, high_res_repaid = net_rev_full_inputs(df_payout, custom_redux = 0, name = 'res_nomax', y = 'AVERAGE', infinite = False, excel = True, reserve_fund = 500, p = 30, p2 = 45)
 #avg = pd.read_csv("Results//ann_net_rev_avg.csv")
 #avg2 = pd.read_csv("Results//ann_net_rev_avg_ba.csv")
-
+dyn, dyn_repaid = net_rev_full_inputs(df_payout, custom_redux = 0, name = 'avg', y = 'AVERAGE', infinite = False, excel = False)
 
 #sns.kdeplot(og.iloc[:,0], label = 'og', fill = True, alpha = .5)
 #sns.kdeplot(infinite.iloc[:,0], label = 'infinite', fill = True, alpha = .5)
