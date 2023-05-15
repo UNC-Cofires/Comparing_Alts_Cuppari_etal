@@ -26,7 +26,7 @@ from sklearn import linear_model
     ## otherwise just save the annual net revenues
     ###########################################################################
 
-## numbers have been updated to reflect the 2022 Annual Report 
+## numbers have been updated to reflect the 2021 Annual Report 
 #######################################################################################################################
 ## this time I have already calculated the net payout with the premium an can input it directly (no separate loading)
 ## df needs to have the net payment to BPA from counterparty (i.e. positive when below tda strike and negative 
@@ -34,10 +34,8 @@ from sklearn import linear_model
 ## note: when using marginal price to scale payments, don't want to use v :) 
 ## p2 = % pos net revenues used to repay BA
 ## p = % pos net revenues used to replenish reserves
-## repay_ba says whether or not there is a line of credit ("yes" or "no")
-
-def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y = 'AVERAGE', infinite = False, 
-                        p = 10, p2 = 32, res_cap = 608691000, repay_ba = 'yes'):
+def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y = 2018, infinite = False, 
+                        reserve_fund = False, p = 10, p2 = 32, res_cap = 608691000):
     #Set Preference Customers reduction percent (number)
             
     # Yearly firm loads (aMW)
@@ -134,20 +132,17 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     ##Calculate revenue
     start = pd.read_excel('net_rev_data.xlsx', sheet_name='res_ba')
 
-    start_res = start.loc[0, y]*pow(10,6)
- 
+    if reserve_fund == False: 
+        start_res = start.loc[0, y]*pow(10,6)
+    else:
+        start_res = reserve_fund * pow(10,6)
     starting_BA = start.loc[2, y]*pow(10,9)
-#    print('STARTING BA: ' + str(starting_BA))
     new_BA = 0 
+    ## NEED TO ADD CONDITION THAT IF INFINITE, EXPAND BA AS NEEDED 
+    ## AND ALSO TRACK EXPANSIONS 
        
-    if repay_ba == 'no':
-        Treas_fac1 = 0   # Treasury facility (1)
-        Treas_fac2 = 0   # Treasury facility (2)
-    else: 
-        Treas_fac1 = 320*pow(10,6)   # Treasury facility (1)
-        Treas_fac2 = 430*pow(10,6)   # Treasury facility (2)
-    print('Treas Fac1: ' + str(Treas_fac1))
-        
+    Treas_fac1 = 320*pow(10,6)   # Treasury facility (1)
+    Treas_fac2 = 430*pow(10,6)   # Treasury facility (2)
     # before contributed to BA from transmission -- now isolating contribution
     # from power 
     trans_BA = 0 # 9.782*pow(10,6)*0.4 #40 percent contribution to BA from transmission line
@@ -165,6 +160,7 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     IP_load['month'] = months
 
     #initialize
+
     BPA_rev_d = pd.DataFrame(index = PF_load.index)
     BPA_Net_rev_y = pd.DataFrame(index = np.arange(1, length))
     BPA_Net_rev_y2 = pd.DataFrame(index = np.arange(1, length))
@@ -185,13 +181,14 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     new_BA_y = pd.DataFrame(index = np.arange(1, length))
     new_BA_y.loc[1,0] = 0
 
+    res_p = pd.DataFrame(index = np.arange(1, length))
+    res_p.loc[:,0] = 0
+
     CRAC = 0
     CRAC_y = pd.DataFrame(index = np.arange(1, length))
     CRAC_y.loc[:,0]=0
     CRAC_rev = pd.DataFrame(index = np.arange(1, length))
     CRAC_rev.loc[:,0] = 0
-
-    avg_customer_prices = pd.DataFrame(index = PF_load.index)
 
     #Create DataFrame list to hold results
     Result_list = ['ensemble' + str(e) for e in range(1,60,1)]
@@ -224,28 +221,15 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     for i in SD.index:
             #daily simulation
             # Calculate revenue from Obligations
-            
-            ## pull the rates month by month 
             RatePF = PF_rates[str(y)][PF_rates['month']==months[i,0]].values 
-            ## when the tariff adjustment is triggered, add that on top of the monthly rate
-            RatePF += CRAC
-            ## revenues from each segment are load * the rate * 24 because 
-            ## these are hourly 
+        #    RatePF += CRAC
             PF_rev.loc[i,0] = PF_load.loc[i,0]*RatePF*24
-            
-            ## same for industrial customers
             RateIP = IP_rates[str(y)][IP_rates['month']==months[i,0]].values 
-            RateIP += CRAC
+        #    RateIP += CRAC
             IP_rev.loc[i,0] = IP_load.loc[i,0]*RateIP*24
-            
-            weight_PF = PF_load.loc[i,0]/(IP_load.loc[i,0] + PF_load.loc[i,0])
-            avg_customer_prices.loc[i,0] = weight_PF*RatePF + (1 - weight_PF)*RateIP
         
         # Calculate Surplus/Deficit revenue
             if SD.loc[i,0] < 0:
-                ## if you have a deficit (SD < 0), then you 
-                ## buy on either CAISO or Mid-C, based on where
-                ## is cheaper, and the opposite with a surplus
                 if Wholesale_Mkt.loc[i,'CAISO'] > Wholesale_Mkt.loc[i,'MidC']:
                         P.loc[i,0] = SD.loc[i,0]*Wholesale_Mkt.loc[i,'MidC']*24
                 else:
@@ -258,173 +242,109 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
                     else:
                         Ex = 0
                     SS.loc[i,0] = ExR*(Ex* Wholesale_Mkt.loc[i,'CAISO']*24) + (SD.loc[i,0]-Ex)*Wholesale_Mkt.loc[i,'MidC']*24
-            
-            ## daily revenue is just the sum of PF and IP revenue with
-            ## any secondary sales, plus any purchases (which are negative $)
             BPA_rev_d.loc[i,0] = PF_rev.loc[i,0] + IP_rev.loc[i,0] + SS.loc[i,0] + P.loc[i,0]
          #   print(BPA_rev_d.loc[i,0])
+        #yearly simulation
         
-        ## yearly simulation aggregates the revenues and then subtracts
-        ## any annual expenses and takes into consideration risk management tools
             if ((i+1)/365).is_integer():
                 year = int((i+1)/365)
-#                print(str(name) + '_' + str(year) + ' payout: ' + str(df_payout.iloc[year-1,0]))
+                print(str(name) + '_' + str(year))
                 bol = year%2 == 0 
                 PF_load_i = PF_load.iloc[(year-1)*365:year*365,0].sum()
                 IP_load_i = IP_load.iloc[(year-1)*365:year*365,0].sum()
                 tot_load_i = PF_load_i + IP_load_i
-                BPA_Net_rev_y.loc[year,0] = (BPA_rev_d.loc[i-364:i,0]).sum() + df_payout.iloc[year-1,0] - costs_y[year-1]
+                BPA_Net_rev_y.loc[year,0] = (BPA_rev_d.loc[i-364:i,0]).sum() + df_payout[year-1] - costs_y[year-1]
                 #print(BPA_Net_rev_y.loc[year,0])
-                print()
-#                print("TF2: " + str(TF.loc[year,'TF2']))
+                #print(df_payout[year-1])
                 ## when have negative net revenues
-                if BPA_Net_rev_y.loc[year,0] < 0:
-                    ## absolute value of losses
+                if int(BPA_Net_rev_y.loc[year,0]<0):
                     losses = -BPA_Net_rev_y.loc[year,0]
                     ## try to use reserves to cover it (Res avail - absolute(losses))
                     Net_res1 = Reserves.loc[year,0] - losses
-                    
-                    ## reserves for next year set at 0 if all used or, 
-                    ## if there were enough reserves to cover document the remainder of reserves 
+                    ## reserves for next year set at 0 or, if there were enough reserves to cover
+                    ## document the remainder of reserves 
                     Reserves.loc[year+1,0] = max(Net_res1, 0)
-#                    print(f'Remaining Reserves {year}: {Reserves.loc[year+1,0]}')
-                    
                     ## when reserves < losses... 
                     if int(Net_res1 < 0):
-                        ## the thus far uncovered losses are the difference
-                        BPA_Net_rev_y2.loc[year,0] = Net_res1 #BPA_Net_rev_y.loc[year,0] + Reserves.loc[year,0]
-                        ## make losses absolute number here again
-                        losses = -Net_res1    
                         ## compensate for what the reserves cover 
-                        
+                        BPA_Net_rev_y2.loc[year,0] = BPA_Net_rev_y.loc[year,0] + Reserves.loc[year,0]
+                        ## the thus far uncovered losses are the difference
+                        losses=-Net_res1
                         #if there is BA AND TF
-                        if repay_ba == 'yes':
-
-                            #print('repay ba')
-                            print(f'year  {year}, reserves depleted to cover losses')
-
-                            ## NOTE: next try adding below change to reset amount in Used_TF
-# Used_TF = Used_TF*bol
-                            if (Remaining_BA.loc[year,0] - Used_TF) >= 750*pow(10,6): 
-                                print(f"year {year}, Rem_BA > Used TF")
-                                ## losses here are a positive number (abs value) 
-                                ## next year's TF is set to the minimum of losses 
-                                ## or $320M (TF1) minus this year's existing TF
-                                ## bol is because it is replenished every two years
-                                TF.loc[year+1,'TF1'] = min(losses, Treas_fac1 - TF.TF1[year]*bol) ## TF1 used
-                                
-                                ## note how much of the TF is used 
-                                Used_TF += TF.loc[year+1,'TF1']
-                                Used_TF2.loc[year, 0] = TF.loc[year+1,'TF1']  
-                                                                
-                                if (Treas_fac1-TF.TF1[year]*bol - losses) < 0:
-                                    CRAC += calculate_CRAC(losses, tot_load_i, name)
-                                    #set max crac as +5$/MWh per ensemble
-                                    CRAC = min(CRAC, 5)
-                                    TF.loc[year+1,'TF2'] = min(losses, Treas_fac2-TF.TF2[year]*bol)
-                                    Used_TF += TF.loc[year+1,'TF2']
-                                    Used_TF2.loc[year, 0] += TF.loc[year+1,'TF2']
-                                    
-                                    ##if used is greater than available, than TTP is False 
-                                    if (Treas_fac2-TF.TF2[year]*bol - losses) <= 0:
-                                        TTP.loc[year] = False
-                                        losses = -(Treas_fac2-TF.TF2[year]*bol - losses)
-                                        print(f"line 334 losses: {losses}")
-                                        BPA_Net_rev_y2.loc[year,0] = -losses
-                                    else: 
-                                        BPA_Net_rev_y2.loc[year,0] = 0
-                                else: 
-                                    #losses = 0 #-(TF.loc[year+1, 'TF1'] - losses) 
-                                    BPA_Net_rev_y2.loc[year,0] = 0
-                                    
-                                Remaining_BA.loc[year+1, 0] = max(0, Remaining_BA.loc[year, 0] - Used_TF2.loc[year,0])
-                                
-                                print(f"Used TF in {year}: {Used_TF}")
-                            else:
-                                print('Warning: depleted borrowing authority and deferred TP')
+                        if (Remaining_BA.loc[year,0] - Used_TF) > 750*pow(10,6): 
+                            ## losses here are a positive number (abs value) 
+                            ## next year's TF is set to the minimum of losses 
+                            ## or $320M (TF1) minus this year's existing TF
+                            ## bol is because it is replenished every two years
+                            TF.loc[year+1,'TF1'] = min(losses, Treas_fac1 - TF.TF1[year]*bol)
+                            
+                            ## note how much of the TF is used 
+                            Used_TF += TF.loc[year+1,'TF1']
+                            Used_TF2.loc[year, 0] = TF.loc[year+1,'TF1']
+                            
+                            ## offset losses by Used TF
+                            BPA_Net_rev_y2.loc[year,0] = BPA_Net_rev_y.loc[year,0] + TF.loc[year+1,'TF1']
+                            
+                            if (Treas_fac1-TF.TF1[year]*bol - losses)<0:
+                                losses= - (Treas_fac1-TF.TF1[year]*bol - losses)
                                 CRAC += calculate_CRAC(losses, tot_load_i, name)
                                 #set max crac as +5$/MWh per ensemble
                                 CRAC = min(CRAC, 5)
-                                TTP.loc[year] = losses
-                                Used_TF2.loc[year, 0] = 0 ## no TF to use 
-                                Remaining_BA.loc[year+1,0] = Remaining_BA.loc[year,0]
-                                TF.loc[year+1,'TF2'] = TF.loc[year,'TF2']
-                                TF.loc[year+1,'TF1'] = TF.loc[year,'TF1']
-                        else: 
-                        ## if have no BA, then mitigated NR is just the losses post reserves
-                        ## we made those absolute so need the negative sign
-                        #    BPA_Net_rev_y2.loc[year,0] = -losses   
-                        #    print(losses)
-
-                            CRAC += calculate_CRAC(losses, tot_load_i, name)
+                                TF.loc[year+1,'TF2'] = min(losses , Treas_fac2-TF.TF2[year]*bol)
+                                Used_TF += TF.loc[year+1,'TF2']
+                                Used_TF2.loc[year, 0] = Used_TF2.loc[year, 0] + TF.loc[year+1,'TF2']
+                                
+                                ##if used is greater than available, than TTP is False 
+                                if (Treas_fac2-TF.TF2[year]*bol - losses) <= 0:
+                                    TTP.loc[year] = False
+                        else:
+                            print('Warning: depleted borrowing authority and deferred TP')
+                            CRAC+=calculate_CRAC(losses, tot_load_i, name)
                             #set max crac as +5$/MWh per ensemble
-                            CRAC = min(CRAC, 5)
-                            Remaining_BA.loc[year+1,0] = 0
-                            
+                            CRAC=min(CRAC, 5)
+                            TTP.loc[year]=losses
                     else: 
-                        ## all losses covered, so set net rev to 0  
-                        BPA_Net_rev_y2.loc[year,0] = 0# BPA_Net_rev_y.loc[year,0] + losses           
-                        ## and don't need to use the BA
-                        Remaining_BA.loc[year+1,0] = Remaining_BA.loc[year,0]
-                    
+                        BPA_Net_rev_y2.loc[year,0] = BPA_Net_rev_y.loc[year,0] + losses           
+                    print("res add: $0")
                 else:## when net revs > 0 
-                    ## no need for mitigation from BA/Reserves
-                    if repay_ba == 'yes':
-                 
-                    
-                        ## $608,691,000 is the Reserves cap
-                        ## subtract TF1 because TF1 is part of the "cash on hand" and treated as part of reserves
-                        Reserves.loc[year+1,0] = min(Reserves.loc[year,0] + 0.01*p*BPA_Net_rev_y.loc[year,0], \
-                                                     res_cap - Treas_fac1)  ##added the reserves.loc[year,0]
-    
-    #                    print("res added: $" + str(res_add))
-    
-                        ## .01 is just for the post processing units sake ('000s instead of M) 
-                        ## ASSUME WON'T USE RESERVES TO REPAY TREASURY 
-                        ## by setting max, essentially only doing this during pos NR years
-                  
-                         ## add how much was repaid in each given year 
-                        ## the curious thing about repayment is that it really just feeds back into the BA, since the BA is indefinite
-                        repaid.loc[year,'repaid'] = max(0, .01*p2*BPA_Net_rev_y.loc[year,0])
-                        ## let's assume the minimum repayment is the last three years' average 
-                        ## -- then later we can compare the repaid column
-                        ## with this value 
-
-                        Remaining_BA.loc[year+1,0] = max(0, Remaining_BA.loc[year,0] + trans_BA - ba_capex + repaid.loc[year,'repaid'])
-
-                    else: ## in case we set the BA to zero and keep it there
-                        Remaining_BA.loc[year+1,0] = 0
-                        Reserves.loc[year+1,0] = min(Reserves.loc[year,0] + 0.01*p*BPA_Net_rev_y.loc[year,0], res_cap)  
-
+                    ## $608,691,000 is the Reserves cap
+                    ## subtract TF1 because TF1 is part of the "cash on hand" and considered part of reserves
+                    Reserves.loc[year+1,0] = min(Reserves.loc[year,0] + 0.01*p*BPA_Net_rev_y.loc[year,0], res_cap-Treas_fac1) 
+                    if Reserves.loc[year+1, 0] < 0:
+                        Reserves.loc[year+1, 0] = 0
                     
                     ## remove from net revenues whatever was contributed to reserves
-                    res_add = max(0, (Reserves.loc[year+1,0] - Reserves.loc[year,0]))
-                    print(f'Added {res_add} in year {year}, \nRemaining Reserves: {Reserves.loc[year+1,0]}')
-
-                    ## remove from NR whatever was repaid to BA
-                    BPA_Net_rev_y2.loc[year,0] = BPA_Net_rev_y.loc[year,0] - res_add - repaid.loc[year, 'repaid']                    
-                    
+                    res_add = (Reserves.loc[year+1,0] - Reserves.loc[year,0])
+                    print("res added: $" + str(res_add))
+                    BPA_Net_rev_y2.loc[year,0] = BPA_Net_rev_y.loc[year,0] - res_add
+                print("pre-mitigation NR: $" + str(BPA_Net_rev_y.loc[year,0]))
+                print("mitigated NR: $" + str(BPA_Net_rev_y2.loc[year,0]))
                     #print(Reserves.loc[year+1,0])
                     #Total_TF+= min(0.01*p*BPA_Net_rev_y.loc[year,0], pow(10,9))  #debt optimization
                     #print('Debt optimization, added: ' + str( 0.01*p*BPA_Net_rev_y.loc[year,0]))
+                CRAC_y.loc[year+1] = CRAC
+                ## a minimum of $484 M goes to reserves, with the debt optimization that 1% * p2 * net revenue goes to TP 
+                ## .01 is just for the post processing units sake ('000s instead of M) 
+                ## ASSUME WON'T USE RESERVES TO REPAY TREASURY 
+                ## by setting max, essentially only doing this during pos NR years
+                Remaining_BA.loc[year+1,0] = max(0, Remaining_BA.loc[year,0] + trans_BA - ba_capex, Remaining_BA.loc[year,0] + trans_BA - ba_capex + 0.01*p2*BPA_Net_rev_y.loc[year,0])
+                ## add how much was repaid in each given year 
+                ## the curious thing about repayment is that it really just feeds back into the BA, since the BA is indefinite
+                repaid.loc[year+1,'repaid'] = max(0, .01*p2*BPA_Net_rev_y.loc[year,0])
+                    ## let's assume the minimum repayment is the last three years' average 
+                    ## -- then later we can compare the repaid column
+                    ## with this value 
+                ## remove from NR whatever was repaid to BA
+                BPA_Net_rev_y2.loc[year,0] = BPA_Net_rev_y2.loc[year,0] - repaid.loc[year+1, 'repaid']
                 
-                ## assume CRAC never goes down. So, if CRAC triggered because of losses in previous years, 
-                ## it remains for the following years 
-                CRAC_y.loc[year+1] = CRAC 
-
-#                print("pre-mitigation NR: $" + str(BPA_Net_rev_y.loc[year,0]))
-#                print("mitigated NR: $" + str(BPA_Net_rev_y2.loc[year,0]))
-                
-                 ## replenish BA if it dips below the $1B threshold 
                 if (infinite == True) & (Remaining_BA.loc[year+1,0] < 1*pow(10,9)): 
-                    print(f"year {year}: adding $2B to BA")
-                    Remaining_BA.loc[year+1,0] = Remaining_BA.loc[year,0] + 2*pow(10,9)
+                    print("adding $2B to BA")
+                    Remaining_BA = Remaining_BA + 2*pow(10,9)
                     ## the cumulative BA added will be the sum of all years with added BA (always add $2B)
-                    new_BA_y.loc[year+1,0] = 2*pow(10,9)  
+                    new_BA_y.loc[year+1,0] = 2*pow(10,9)
                 else: 
                     new_BA_y.loc[year+1,0] = 0
-                
-                #print(Remaining_BA.loc[year+1,0])
+                    
                 #ensembles     
                 if year%20 == 0:
                     Result_ensembles_y['ensemble' + str(e)] = pd.DataFrame(data= np.stack([Reserves.loc[year-19:year,0],TTP.loc[year-19:year,'TTP'],
@@ -440,25 +360,19 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
                     Result_ensembles_d['ensemble' + str(e)].reset_index(inplace=True, drop=True)
                     #initialize new ensemble
                     e+=1
-                    Reserves.loc[year+1,0] = start_res
-                    CRAC = 0 
-                    CRAC_y.loc[year+1] = 0
-                    print('CRAC reset')
+                    Reserves.loc[year+1,0]=start_res
+                    CRAC=0 
+                    CRAC_y.loc[year+1]=0
                     Used_TF=0    #initialize treasury facility
                     Remaining_BA.loc[year+1,0] = starting_BA  #Initialize Remaining borrowing authority 
                     new_BA_y.loc[year+1,0] = 0
-                    repaid.loc[year+1, 'repaid'] = 0
+                    repaid.loc[year+1, 0] = 0
                     Used_TF2.loc[year+1, 0] = 0
 
 
 #Save results
-    Results_d=pd.DataFrame(np.stack([BPA_rev_d[0],PF_rev[0],IP_rev[0],P[0],SS[0], \
-                                     BPA_hydro[0],PF_load[0],IP_load[0],SD[0],BPA_res[0], \
-                                     Wholesale_Mkt['MidC'],Wholesale_Mkt['CAISO'], \
-                                     avg_customer_prices[0]],axis=1),
-                        columns=['Rev_gross','PF_rev','IP_rev','P','SS','BPA_hydro', \
-                                 'PF_load','IP_load','Surplus/Deficit','BPA_resources', \
-                                 'MidC','CAISO', 'avg_prices'])
+    Results_d=pd.DataFrame(np.stack([BPA_rev_d[0],PF_rev[0],IP_rev[0],P[0],SS[0],BPA_hydro[0],PF_load[0],IP_load[0],SD[0],BPA_res[0],Wholesale_Mkt['MidC'],Wholesale_Mkt['CAISO']],axis=1),
+                        columns=['Rev_gross','PF_rev','IP_rev','P','SS','BPA_hydro','PF_load','IP_load','Surplus/Deficit','BPA_resources','MidC','CAISO' ])
     
     if excel == True: 
         with pd.ExcelWriter('Results//BPA_net_rev_stoc_d' + name + '.xlsx' ) as writer:
@@ -476,69 +390,39 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     # BPA_Net_rev_y2.to_csv('Results//ann_net_rev2_'+str(name)+'.csv')
     print(name)
     print()
-    print(f"mean NR1: {BPA_Net_rev_y.iloc[:,0].mean():,}")
-    print(f"mean NR2: {BPA_Net_rev_y2.iloc[:,0].mean():,}")
-    print(f"95% VaR1: {np.percentile(BPA_Net_rev_y.iloc[:,0], 5):,}")
-    print(f"95% VaR2: {np.percentile(BPA_Net_rev_y2.iloc[:,0], 5):,}")
+    print('mean NR1: ' + str(BPA_Net_rev_y.mean()))
+    print('mean NR2: ' + str(BPA_Net_rev_y2.mean()))
+    print('95% VaR1: ' + str(np.percentile(BPA_Net_rev_y, 5)))
+    print('95% VaR2: ' + str(np.percentile(BPA_Net_rev_y2, 5)))
     BPA_NR = pd.concat([BPA_Net_rev_y, BPA_Net_rev_y2], axis = 1)
     BPA_NR.to_csv('Results//ann_net_rev_'+str(name)+'.csv')
     return BPA_NR, repaid
 
-df_payout = pd.DataFrame([0]*1189)
-# #df_payout = pd.DataFrame(pd.read_csv("Results/net_payouts10.csv").iloc[:,1])
-# df_payout2 = pd.DataFrame(pd.read_csv("Results/net_payouts35.csv").iloc[:,1])
-
-# res_cap = ((608.6*pow(10,6))/120)*90
-res_cap2 = ((608.6*pow(10,6))/120)*60
-
-# repay_ba = 'no'
-# name = 'ins'
-# y = 'AVERAGE'
-# custom_redux = 0
-# p = 10
-# p2 = 32
-# infinite = False
-# excel = True
 
 
-# nr_ind_cap, index_fix_cap = net_rev_full_inputs(df_payout, custom_redux = 0, 
-#                                                               name = 'index_cap_no_loc10', excel = True, 
-#                                                               y = 'no_loc', res_cap = res_cap, repay_ba = 'no')
-
-# nr_ind_cap, index_fix_cap = net_rev_full_inputs(df_payout2, custom_redux = 0, 
-#                                                               name = 'index_cap_no_loc35', excel = True, 
-#                                                               y = 'no_loc', res_cap = res_cap2, repay_ba = 'no')
 
 
-# nr_lim_loc, repay_lim_loc = net_rev_full_inputs(df_payout, custom_redux = 0, 
-#                                               name = 'lim_loc', excel = True, 
-#                                               y = 'AVERAGE', repay_ba = 'yes', 
-#                                               infinite = False)
 
-# nr_no_loc_cap, repay_no_loc_cap = net_rev_full_inputs(df_payout, custom_redux = 0, 
-#                                               name = 'no_loc_cap_low', excel = True, 
-#                                               res_cap = res_cap2, 
-#                                               y = 'no_loc', repay_ba = 'no')
-
-# loc, repay_loc = net_rev_full_inputs(df_payout, custom_redux = 0, 
-#                                               name = 'loc2', excel = True, 
-#                                               infinite = True,
-#                                             y = 'AVERAGE', repay_ba = 'yes')
-
-# loc_cap, repay_loc_cap = net_rev_full_inputs(df_payout, custom_redux = 0, 
-#                                               name = 'loc_cap', excel = True, 
-#                                                 res_cap = res_cap2, infinite = True,
-#                                             y = 'AVERAGE', repay_ba = 'yes')
-
-# nr_cap_loc, repay_cap_loc = net_rev_full_inputs(df_payout, custom_redux = 0, 
-#                                               name = 'loc_cap', excel = True, 
-#                                               res_cap = res_cap, infinite = True,
-#                                               y = 'AVERAGE', repay_ba = 'yes')
+df_payout = [0]*1200
+#avg21, avg_repaid21 = net_rev_full_inputs(df_payout, custom_redux = 0, name = 'avg_18_22', y = 'AVERAGE', infinite = False)
+#og, og_repaid = net_rev_full_inputs(df_payout, custom_redux = 0, name = 'og2', excel = False, y = 2018, infinite = False)
+#update = net_rev_full_inputs(df_payout, custom_redux = 0, name = '2021update', excel = True, y = 2022)
+#infinite, infinite_repaid = net_rev_full_inputs(df_payout, custom_redux = 0, name = 'infinite', excel = True, y = 'AVERAGE', infinite = True)
+#avg_ba = net_rev_full_inputs(df_payout, name = 'avg_ba', y = 'AVERAGE', infinite = True)
+#low_res, low_res_repaid = net_rev_full_inputs(df_payout, custom_redux = 0, name = 'res90', y = 'AVERAGE', infinite = False, excel = True, res_cap = (608.6*pow(10,6))*90/120)
+#high_res, high_res_repaid = net_rev_full_inputs(df_payout, custom_redux = 0, name = 'res_og', y = 'AVERAGE', infinite = False, excel = True, p2 = 32, p = 15)
+#avg = pd.read_csv("Results//ann_net_rev_avg.csv")
+#avg2 = pd.read_csv("Results//ann_net_rev_avg_ba.csv")
+#avg_no_crac, avg2_no_crac = net_rev_full_inputs(df_payout, custom_redux = 0, name = 'avg_no_crac', y = 'AVERAGE', infinite = False, excel = True, p2 = 32, p = 15)
 
 
-# nr_no_crac_no_loc, repay_no_crac_no_loc = net_rev_full_inputs(df_payout, custom_redux = 0, 
-#                                               name = 'no_crac2', excel = True, 
-#                                               y = 'no_loc', repay_ba = 'no')
+
+
+
+
+
+
+
 
 
 
