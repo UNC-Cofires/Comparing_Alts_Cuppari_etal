@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Apr 12 12:29:19 2019
+Created on Tue Jul 18 18:09:28 2023
 
-@author: sdenaro
+@author: rcuppari
 """
 
 import matplotlib.pyplot as plt
@@ -36,8 +36,10 @@ from sklearn import linear_model
 ## p = % pos net revenues used to replenish reserves
 ## repay_ba says whether or not there is a line of credit ("yes" or "no")
 
-def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y = 'AVERAGE', infinite = False, 
-                        p = 10, p2 = 32, res_cap = 608691000, repay_ba = 'yes'):
+def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, 
+                        y = 'AVERAGE', infinite = False, 
+                        p = 10, p2 = 32, res_cap = 608691000, repay_ba = 'yes',
+                        int_rate = 0.042, time_horizon = 50):
     #Set Preference Customers reduction percent (number)
             
     # Yearly firm loads (aMW)
@@ -47,8 +49,11 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     ET_load_y = df_load.loc[14, y]
 
     # Hourly hydro generation from FCRPS stochastic simulation
-    df_hydro = pd.read_csv('CAPOW_data/new_BPA_hydro_daily.csv')
-    df_hydro = df_hydro['gen']
+    #df_hydro = pd.read_csv('CAPOW_data/new_BPA_hydro_daily.csv')
+    #df_hydro = df_hydro['gen']
+    
+    df_hydro = pd.read_csv('CAPOW_data/new_BPA_hydro_daily2.csv').iloc[:,1]
+    
     BPA_hydro = df_hydro/24
     BPA_hydro[BPA_hydro>45000]=45000
     #Remove CAISO bad_years
@@ -101,9 +106,9 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
 
     # Derive daily BPA loads and other resources
     PF_load = pd.DataFrame(PF_load_y*load_ratio)
-    PF_load_avg = (np.reshape(PF_load.values, (365, length - 1), order='F')).sum(axis=0).mean()
+#    PF_load_avg = (np.reshape(PF_load.values, (365, length - 1), order='F')).sum(axis=0).mean()
     IP_load = pd.DataFrame(IP_load_y*load_ratio)
-    IP_load_avg = (np.reshape(IP_load.values, (365, length - 1), order='F')).sum(axis=0).mean()
+#    IP_load_avg = (np.reshape(IP_load.values, (365, length - 1), order='F')).sum(axis=0).mean()
     ET_load = pd.DataFrame(ET_load_y*load_ratio)
     Purch = pd.DataFrame(Purch_y*load_ratio)
     Wind = pd.DataFrame(Wind_y*wind_ratio)
@@ -126,7 +131,6 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     Wholesale_Mkt=pd.concat([MidC,CAISO], axis=1)
     Wholesale_Mkt.columns=['MidC','CAISO']
                        
-
     # Extra regional discount and Transmission Availability
     ExR=0.71
     TA=1000
@@ -140,20 +144,20 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
 #    print('STARTING BA: ' + str(starting_BA))
     new_BA = 0 
        
-    if repay_ba == 'no':
+# CHANGED    if repay_ba == 'no':
+    if infinite == False:
         Treas_fac1 = 0   # Treasury facility (1)
         Treas_fac2 = 0   # Treasury facility (2)
     else: 
         Treas_fac1 = 320*pow(10,6)   # Treasury facility (1)
         Treas_fac2 = 430*pow(10,6)   # Treasury facility (2)
-    print('Treas Fac1: ' + str(Treas_fac1))
         
     # before contributed to BA from transmission -- now isolating contribution
     # from power 
     trans_BA = 0 # 9.782*pow(10,6)*0.4 #40 percent contribution to BA from transmission line
     Used_TF = 0
     Used_TF2 = pd.DataFrame(index=np.arange(1, length))
-    Used_TF2.loc[1,0] = 0 #used TF over the 20 year enesemble    
+    Used_TF2.loc[:,0] = 0 #used TF over the 20 year enesemble    
     trans_losses = 3*(Wind + BPA_hydro + Nuc)/100; #consider 3% transmission losses, total BPA resources
     BPA_res = pd.DataFrame(data=(Wind + BPA_hydro + Purch + Nuc)-trans_losses) 
     #Calculate Surplus/Deficit given BPA resources BP_res
@@ -185,6 +189,13 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     new_BA_y = pd.DataFrame(index = np.arange(1, length))
     new_BA_y.loc[1,0] = 0
 
+    ## ADD AMORTIZATION STUFF NEXT 
+    amortized = pd.DataFrame(index = np.arange(1, 21 + time_horizon), 
+                             columns = ['amort']) ## will only use if p2 != 0
+    amortized.iloc[:,:] = 0 
+    amort_schedule = pd.DataFrame(index = np.arange(1, 21 + time_horizon)) 
+    amort_schedule.iloc[:,:] = 0 
+    
     CRAC = 0
     CRAC_y = pd.DataFrame(index = np.arange(1, length))
     CRAC_y.loc[:,0]=0
@@ -194,13 +205,14 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     avg_customer_prices = pd.DataFrame(index = PF_load.index)
 
     #Create DataFrame list to hold results
-    Result_list = ['ensemble' + str(e) for e in range(1,60,1)]
     Result_ensembles_y = {} 
     Result_ensembles_d = {} 
 
-#    p = 30  # percent surplus that goes to reserve
-#    p2 = 32  # percent surplus that goes to debt opt
-    d = 1
+    ## amortization set up
+    num = int_rate * pow((1 + int_rate), time_horizon) ## 30 = debt repayment time horizon
+    deno = pow((1 + int_rate), time_horizon) - 1
+    res_add = 0
+    
     e = 1
 
     def calculate_CRAC(NR_, tot_load, name):
@@ -269,14 +281,13 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
             if ((i+1)/365).is_integer():
                 year = int((i+1)/365)
 #                print(str(name) + '_' + str(year) + ' payout: ' + str(df_payout.iloc[year-1,0]))
-                bol = year%2 == 0 
+                bol = year%2 == 0
                 PF_load_i = PF_load.iloc[(year-1)*365:year*365,0].sum()
                 IP_load_i = IP_load.iloc[(year-1)*365:year*365,0].sum()
                 tot_load_i = PF_load_i + IP_load_i
                 BPA_Net_rev_y.loc[year,0] = (BPA_rev_d.loc[i-364:i,0]).sum() + df_payout.iloc[year-1,0] - costs_y[year-1]
-                #print(BPA_Net_rev_y.loc[year,0])
-                print()
-#                print("TF2: " + str(TF.loc[year,'TF2']))
+                Used_TF = Used_TF*bol
+                
                 ## when have negative net revenues
                 if BPA_Net_rev_y.loc[year,0] < 0:
                     ## absolute value of losses
@@ -299,13 +310,12 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
                         
                         #if there is BA AND TF
                         if repay_ba == 'yes':
-
-                            #print('repay ba')
                             print(f'year  {year}, reserves depleted to cover losses')
 
                             ## NOTE: next try adding below change to reset amount in Used_TF
 # Used_TF = Used_TF*bol
-                            if (Remaining_BA.loc[year,0] - Used_TF) >= 750*pow(10,6): 
+                            if Used_TF <= 750*pow(10,6): 
+#                            if (Remaining_BA.loc[year,0] - Used_TF) >= 750*pow(10,6): 
                                 print(f"year {year}, Rem_BA > Used TF")
                                 ## losses here are a positive number (abs value) 
                                 ## next year's TF is set to the minimum of losses 
@@ -366,6 +376,30 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
                         BPA_Net_rev_y2.loc[year,0] = 0# BPA_Net_rev_y.loc[year,0] + losses           
                         ## and don't need to use the BA
                         Remaining_BA.loc[year+1,0] = Remaining_BA.loc[year,0]
+                        Used_TF2.loc[year, 0] = 0 ## no TF to use 
+
+                    
+                    ## need to calculate the amortization of new debt 
+                    ## and keep track of accumulating debt
+                    ## new obligation going forward, to account for skipped year
+                    ## but just going to load it all onto the next year
+                    if Used_TF2.loc[year,0] > 0: 
+                        new_oblig = Used_TF2.loc[year,0] * (num/deno) ## if used_tf = 0, then new_oblig should = 0
+                    else: new_oblig = 0 
+                    
+                    if p2 != 0: ## if repay 0%, then no "deferral", just ignore
+                        deferred = amortized.iloc[year%20-1, 0]                                    
+                        ## and take deferred out of last year, otherwise it 
+                        ## is double counted for the analysis 
+                        amortized.iloc[year%20-1, 0] -= deferred 
+                           
+                        ## just add deferred obligation directly to next year
+                        amortized.iloc[year%20, 0] += deferred * (1 + int_rate)
+                        
+                    ## then add new obligation for the long term
+                    amortized.iloc[(year%20):(year%20 + time_horizon), 0] += new_oblig                                 
+                    print(f"New debt obligation: {new_oblig}")
+                    print()
                     
                 else:## when net revs > 0 
                     ## no need for mitigation from BA/Reserves
@@ -385,12 +419,44 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
                   
                          ## add how much was repaid in each given year 
                         ## the curious thing about repayment is that it really just feeds back into the BA, since the BA is indefinite
-                        repaid.loc[year,'repaid'] = max(0, .01*p2*BPA_Net_rev_y.loc[year,0])
+                        #repaid.loc[year,'repaid'] = max(0, .01*p2*BPA_Net_rev_y.loc[year,0])
+                        
+                        if p2 == 'all':                             
+                            ## then, need to repay as much as possible (within BPA's remaining net revs) 
+                            ## so, a minimum of the full amount, or whatever BPA has left after replenishing reserves
+                            repaid.loc[year, 'repaid'] = min(amortized.iloc[year%20-1, 0], \
+                                                             BPA_Net_rev_y2.loc[year,0]) 
+                            
+                        elif p2 > 0: ## if 0% < p2 < 100%-p, pay up to amortized amount or p2% of net revenues
+                            ## because using a percentage of the annual net revenues, use 
+                            ## BPA_Net_rev_y instead of BPA_Net_rev_y2, which excludes res add (which is a % of NR)
+                            repaid.loc[year,'repaid'] = min(amortized.iloc[year%20-1,0], 
+                                                            .01*p2*BPA_Net_rev_y2.loc[year,0])                           
+                        else: 
+                            repaid.loc[year, 'repaid'] = 0
+                            
+                        ## if they can't repay the full debt service, then it needs to get kicked 
+                        ## to the next year (essentially take out a new loan and re-amortize that)
+                        if p2 != 0: 
+                            deferred = max(0, \
+                                           amortized.iloc[year%20-1,0] - repaid.loc[year, 'repaid'])
+                            
+                            if deferred > 0: 
+                                print(f"deferred in {year}: ${round(deferred,2):,}")  
+                                print()
+                                amortized.iloc[year%20-1, 0] -= deferred
+                                        
+                                ## just add deferred obligation directly to next year, with some interest
+                                amortized.iloc[(year%20), 0] += deferred*(1+int_rate)
+
+
                         ## let's assume the minimum repayment is the last three years' average 
                         ## -- then later we can compare the repaid column
                         ## with this value 
 
-                        Remaining_BA.loc[year+1,0] = max(0, Remaining_BA.loc[year,0] + trans_BA - ba_capex + repaid.loc[year,'repaid'])
+                        Remaining_BA.loc[year+1,0] = max(0, Remaining_BA.loc[year,0] + \
+                                                         trans_BA - ba_capex + \
+                                                         repaid.loc[year,'repaid'])
 
                     else: ## in case we set the BA to zero and keep it there
                         Remaining_BA.loc[year+1,0] = 0
@@ -399,7 +465,7 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
                     
                     ## remove from net revenues whatever was contributed to reserves
                     res_add = max(0, (Reserves.loc[year+1,0] - Reserves.loc[year,0]))
-                    print(f'Added {res_add} in year {year}, \nRemaining Reserves: {Reserves.loc[year+1,0]}')
+#                    print(f'Added {res_add} in year {year}, \nRemaining Reserves: {Reserves.loc[year+1,0]}')
 
                     ## remove from NR whatever was repaid to BA
                     BPA_Net_rev_y2.loc[year,0] = BPA_Net_rev_y.loc[year,0] - res_add - repaid.loc[year, 'repaid']                    
@@ -449,7 +515,15 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
                     new_BA_y.loc[year+1,0] = 0
                     repaid.loc[year+1, 'repaid'] = 0
                     Used_TF2.loc[year+1, 0] = 0
+                    amort_schedule = pd.concat([amort_schedule, amortized], axis = 1)
+                    ## and then reset
+                    amortized.iloc[:,:] = 0
 
+    print()
+    print(f"mean NR1: {BPA_Net_rev_y.iloc[:,0].mean():,}")
+    print(f"mean NR2: {BPA_Net_rev_y2.iloc[:,0].mean():,}")
+    print(f"95% VaR1: {np.percentile(BPA_Net_rev_y.iloc[:,0], 5):,}")
+    print(f"95% VaR2: {np.percentile(BPA_Net_rev_y2.iloc[:,0], 5):,}")
 
 #Save results
     Results_d=pd.DataFrame(np.stack([BPA_rev_d[0],PF_rev[0],IP_rev[0],P[0],SS[0], \
@@ -474,71 +548,86 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     BPA_rev_d.to_csv('Results//daily_net_rev_'+str(name)+'.csv')
     # BPA_Net_rev_y.to_csv('Results//ann_net_rev_'+str(name)+'.csv')
     # BPA_Net_rev_y2.to_csv('Results//ann_net_rev2_'+str(name)+'.csv')
-    print(name)
-    print()
-    print(f"mean NR1: {BPA_Net_rev_y.iloc[:,0].mean():,}")
-    print(f"mean NR2: {BPA_Net_rev_y2.iloc[:,0].mean():,}")
-    print(f"95% VaR1: {np.percentile(BPA_Net_rev_y.iloc[:,0], 5):,}")
-    print(f"95% VaR2: {np.percentile(BPA_Net_rev_y2.iloc[:,0], 5):,}")
+    amort_schedule.to_csv('Results//amort_sched_'+str(name)+'.csv')
+
+    print('completed ' + name)
+
     BPA_NR = pd.concat([BPA_Net_rev_y, BPA_Net_rev_y2], axis = 1)
     BPA_NR.to_csv('Results//ann_net_rev_'+str(name)+'.csv')
+    
+
     return BPA_NR, repaid
 
 df_payout = pd.DataFrame([0]*1189)
-# #df_payout = pd.DataFrame(pd.read_csv("Results/net_payouts10.csv").iloc[:,1])
-# df_payout2 = pd.DataFrame(pd.read_csv("Results/net_payouts35.csv").iloc[:,1])
+# df_payout2 = pd.DataFrame(pd.read_csv("Results/net_payouts15.csv").iloc[:,1])
+# df_payout2 = pd.DataFrame(pd.read_csv("Results/net_payouts5.csv").iloc[:,1])
 
-# res_cap = ((608.6*pow(10,6))/120)*90
-res_cap2 = ((608.6*pow(10,6))/120)*60
+bpa_wacc = pd.read_excel('../Hist_data/BPA_debt.xlsx', sheet_name = 'WAI')
+ba_int_rate = bpa_wacc[bpa_wacc['Name'] == 'US Treasury ']['Average'].values[0]
+nf_int_rate = bpa_wacc[bpa_wacc['Name'] == 'Non-federal Total']['Average'].values[0]
 
-# repay_ba = 'no'
-# name = 'ins'
-# y = 'AVERAGE'
-# custom_redux = 0
-# p = 10
-# p2 = 32
-# infinite = False
-# excel = True
+res_cap = ((608.6*pow(10,6)))#/120)*90
+repay_ba = 'yes'
+name = 'nn'
+y = 'AVERAGE'
+custom_redux = 0
+p = 10
+p2 = 'all'
+infinite = True
+excel = False
 
+# ## crac 
+# from BPA_net_rev_func_no_crac import net_rev_full_inputs as net_rev_full_inputs_no_crac 
+# nr_no_crac_no_loc, repay_no_crac_no_loc = net_rev_full_inputs_no_crac(df_payout, custom_redux = 0, 
+#                                               name = 'no_crac_no_capex_new_hyd', excel = True, 
+#                                               y = 'no_loc', repay_ba = 'no', 
+#                                               ba_int_rate = ba_int_rate, infinite = False)
 
-# nr_ind_cap, index_fix_cap = net_rev_full_inputs(df_payout, custom_redux = 0, 
-#                                                               name = 'index_cap_no_loc10', excel = True, 
-#                                                               y = 'no_loc', res_cap = res_cap, repay_ba = 'no')
+# loc_repay_all_nf, repay_loc_all_nf = net_rev_full_inputs(df_payout, custom_redux = 0, 
+#                                               name = 'loc_all_repay_nf_new_hyd', excel = True, 
+#                                               infinite = True, p2 = 'all', 
+#                                             y = 'AVERAGE', repay_ba = 'yes', 
+#                                               int_rate = nf_int_rate)
 
-# nr_ind_cap, index_fix_cap = net_rev_full_inputs(df_payout2, custom_redux = 0, 
-#                                                               name = 'index_cap_no_loc35', excel = True, 
-#                                                               y = 'no_loc', res_cap = res_cap2, repay_ba = 'no')
+# loc_repay, repay_loc = net_rev_full_inputs(df_payout, custom_redux = 0, 
+#                                               name = 'loc_repay_new_hyd', excel = True, 
+#                                               infinite = True, p2 = 32, 
+#                                             y = 'AVERAGE', repay_ba = 'yes', 
+#                                             int_rate = ba_int_rate)
 
+# loc_repay_nf, repay_loc_nf = net_rev_full_inputs(df_payout, custom_redux = 0, 
+#                                               name = 'loc_repay_nf_new_hyd', excel = True, 
+#                                               infinite = True, p2 = 32, 
+#                                             y = 'AVERAGE', repay_ba = 'yes', 
+#                                             int_rate = nf_int_rate)
 
-# nr_lim_loc, repay_lim_loc = net_rev_full_inputs(df_payout, custom_redux = 0, 
-#                                               name = 'lim_loc', excel = True, 
-#                                               y = 'AVERAGE', repay_ba = 'yes', 
-#                                               infinite = False)
+# loc_repay_all, repay_loc_all = net_rev_full_inputs(df_payout, custom_redux = 0, 
+#                                               name = 'loc_all_repay_new_hyd', excel = True,
+#                                               infinite = True, p2 = 'all',  
+#                                             y = 'AVERAGE', repay_ba = 'yes', 
+#                                             int_rate = ba_int_rate)
 
-# nr_no_loc_cap, repay_no_loc_cap = net_rev_full_inputs(df_payout, custom_redux = 0, 
-#                                               name = 'no_loc_cap_low', excel = True, 
-#                                               res_cap = res_cap2, 
-#                                               y = 'no_loc', repay_ba = 'no')
+# loc_repay0, repay0_loc = net_rev_full_inputs(df_payout, custom_redux = 0, 
+#                                             name = 'loc_repay0_new_hyd', excel = True, 
+#                                             infinite = True, p2 = 0, 
+#                                             y = 'AVERAGE', repay_ba = 'yes', 
+#                                             int_rate = ba_int_rate)
 
-# loc, repay_loc = net_rev_full_inputs(df_payout, custom_redux = 0, 
-#                                               name = 'loc2', excel = True, 
-#                                               infinite = True,
-#                                             y = 'AVERAGE', repay_ba = 'yes')
+# loc_repay0_nf, repay0_loc_nf = net_rev_full_inputs(df_payout, custom_redux = 0, 
+#                                               name = 'loc0_repay_nf_new_hyd', excel = True, 
+#                                               infinite = True, p2 = 0, 
+#                                             y = 'AVERAGE', repay_ba = 'yes', 
+#                                             int_rate = nf_int_rate)
 
-# loc_cap, repay_loc_cap = net_rev_full_inputs(df_payout, custom_redux = 0, 
-#                                               name = 'loc_cap', excel = True, 
-#                                                 res_cap = res_cap2, infinite = True,
-#                                             y = 'AVERAGE', repay_ba = 'yes')
+# no_loc_repay, no_loc2 = net_rev_full_inputs(df_payout, custom_redux = 0, 
+#                                             name = 'no_loc_new_hyd', excel = True, 
+#                                             infinite = False, p2 = 32, 
+#                                             y = 'no_loc', repay_ba = 'no', 
+#                                             int_rate = ba_int_rate)
 
-# nr_cap_loc, repay_cap_loc = net_rev_full_inputs(df_payout, custom_redux = 0, 
-#                                               name = 'loc_cap', excel = True, 
-#                                               res_cap = res_cap, infinite = True,
-#                                               y = 'AVERAGE', repay_ba = 'yes')
-
-
-# nr_no_crac_no_loc, repay_no_crac_no_loc = net_rev_full_inputs(df_payout, custom_redux = 0, 
-#                                               name = 'no_crac2', excel = True, 
-#                                               y = 'no_loc', repay_ba = 'no')
-
+# df_payout = pd.DataFrame(pd.read_csv("Results/net_payouts10.csv").iloc[:,1])
+# nr_ind, index_fix = net_rev_full_inputs(df_payout, custom_redux = 0, 
+#                                         name = 'index_no_loc210', excel = True, 
+#                                         y = 'no_loc', repay_ba = 'no', infinite = False)
 
 
