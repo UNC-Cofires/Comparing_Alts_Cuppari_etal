@@ -38,7 +38,8 @@ def expected_repay(df, rate, time_horizon = 30):
 ## for the pv of the modelled repayments (False) or the expected repayments (True)
 ## NOTE: this is cumulative
 ## also note, I confusing left these rates as decimals down here, NOT PERCENTS
-def pv_calc(df, discount = 5, rate = 'na', modelled = False, time_horizon = 30): 
+def pv_calc(df, discount = 5, rate = 'na', modelled = False, 
+            time_horizon = 30): 
     if modelled == True:
         amortized = expected_repay(df, rate, time_horizon = time_horizon)
 #        print(amortized.mean().mean())
@@ -52,11 +53,13 @@ def pv_calc(df, discount = 5, rate = 'na', modelled = False, time_horizon = 30):
         for r in range(0, len(amortized)):
             for c in range(0, len(amortized.columns)): 
                 new_yr = amortized.iloc[r,c]/pow((1 + discount/100),r)
+
                 
                 if r == 0: 
                     pv.iloc[r, c] = new_yr 
                 else: 
                     pv.iloc[r, c] = pv.iloc[(r-1), c] + new_yr
+                
     except: 
         pv = pd.DataFrame(index = np.arange(len(df)), columns = ['npv'])
         for r in range(0, len(df)):
@@ -70,32 +73,6 @@ def pv_calc(df, discount = 5, rate = 'na', modelled = False, time_horizon = 30):
         return amortized, pv
     else: 
         return pv 
-
-## need to use what was USED, to show what should have come back  
-def used(redux):
-    used_e=pd.DataFrame(index = np.arange(0,20), columns = np.arange(0,59))
-    used_e.iloc[0,:] = 0
-    
-    ba_e = pd.DataFrame()
-    add_ba_e = pd.DataFrame()
-    
-    for e in range (1,60):
-        ba_e = pd.concat([ba_e, pd.read_excel('Results/BPA_net_rev_stoc_y' + redux + '.xlsx', sheet_name='ensemble' + str(e), usecols=['BA'])], axis = 1)
-        add_ba_e = pd.concat([add_ba_e, pd.read_excel('Results/BPA_net_rev_stoc_y' + redux + '.xlsx', sheet_name='ensemble' + str(e), usecols=['add_BA'])], axis = 1)
-        
-    ba_e2 = ba_e.copy()
-    add_ba_e.columns = ba_e.columns
-    ## first need to account for adding BA (which might be added even after it is used)
-    for i in range(1,len(ba_e)): 
-        ba_e2.iloc[i,:] = ba_e.iloc[i,:] - add_ba_e.iloc[i,:]
-        used_e.iloc[i,:] = ba_e2.iloc[i-1,:] - ba_e2.iloc[i,:]
-
-    used_e[used_e < 0] = 0
-                
-    used_e.fillna(0, inplace = True)
-    used_avg = used_e.mean(axis = 1)
-    
-    return used_e, used_avg 
 
 def repaid(redux, color = False):
     Repaid_e=pd.DataFrame()
@@ -134,8 +111,7 @@ def crac(redux):
     count=np.sum(CRAC_e.any())
     percent1=100*count/59  #BAU=11.86% 
     
-    mean = Qc.mean().mean()
-    
+    mean = Qc.mean().mean()    
 #    print(redux)
 #    print('Percent of CRAC ensembles: %.2f' % percent1 )
 #    print('Mean CRAC: %.2f' % mean )
@@ -162,23 +138,29 @@ def compound_interest(principal, rate, time):
     # Calculates compound interest
     ## rate here is in % form so we divide by 100 
     Amount = principal * (pow((1 + rate / 100), time))
-    CI = Amount - principal
-#    print("Compound interest is", CI)
     return Amount
 
 
-def opp_cost(money, time_horizon, safe_rate, alt_rate):
-    opp_cost = []
+
+def pv_opp_cost(money, time_horizon, safe_rate, alt_rate, discount = 5):
+    opp_cost2 = []
+    cum_opp_cost = 0
     
     for i in range(0, len(money)): 
         val_safe = compound_interest(money[i], safe_rate, time_horizon)
         val_alt = compound_interest(money[i], alt_rate, time_horizon)
-        opp_cost_ann = val_alt - val_safe 
-        #print(opp_cost_ann)
-        
-        opp_cost.append(opp_cost_ann)
     
-    return opp_cost
+        opp_cost_ann = (val_alt - val_safe)/pow((1+discount/100),i)
+        #print(opp_cost_ann)
+       
+        if i > 0: 
+            opp_cost2.append(opp_cost_ann + opp_cost2[i-1])
+        else: 
+            opp_cost2.append(opp_cost_ann)
+            
+        cum_opp_cost += opp_cost_ann   
+        
+    return opp_cost2
     
     
 def plot_cum_pv(df, label, color = 'blue', linestyle = 'solid', loc = 'upper left'): 
@@ -196,4 +178,51 @@ def plot_cum_pv(df, label, color = 'blue', linestyle = 'solid', loc = 'upper lef
            fontsize = 16)
     plt.legend(frameon = False, fontsize = 16, loc = loc)
     plt.show()
+
+def TF_used(prefix, num_ensem = 59):
+    used_e = pd.DataFrame()
+    
+    for e in range (1,60):
+        used_e=pd.concat([used_e, pd.read_excel('Results/BPA_net_rev_stoc_y' + prefix + '.xlsx', sheet_name='ensemble' + str(e), usecols=['used_BA'])], axis=1) #usecols=['TF2'])], axis=1)   
+    return used_e
+
+
+def TF_used2(prefix, num_ensem = 59):
+    used_e = pd.DataFrame()
+    tf1 = pd.DataFrame()
+    tf2 = pd.DataFrame()
+    for e in range (1,60):
+        tf1 = pd.concat([tf1, pd.read_excel('Results/BPA_net_rev_stoc_y' + prefix + '.xlsx', sheet_name='ensemble' + str(e), usecols=['TF1'])], axis = 1)
+        tf2 = pd.concat([tf2, pd.read_excel('Results/BPA_net_rev_stoc_y' + prefix + '.xlsx', sheet_name='ensemble' + str(e), usecols=['TF2'])], axis = 1)
+        used_e = pd.concat([used_e, pd.read_excel('Results/BPA_net_rev_stoc_y' + prefix + '.xlsx', sheet_name='ensemble' + str(e), usecols=['used_BA'])], axis = 1)
+               
+    return tf1, tf2, used_e
+
+
+## need to use what was USED, to show what should have come back  
+def used(redux, folder = 'Results'):
+    used_e=pd.DataFrame(index = np.arange(0,20), columns = np.arange(0,59))
+    used_e.iloc[0,:] = 0
+    
+    ba_e = pd.DataFrame()
+    add_ba_e = pd.DataFrame()
+    
+    for e in range (1,60):
+        ba_e = pd.concat([ba_e, pd.read_excel(f'{folder}/BPA_net_rev_stoc_y{redux}.xlsx', sheet_name='ensemble' + str(e), usecols=['BA'])], axis = 1)
+        add_ba_e = pd.concat([add_ba_e, pd.read_excel(f'{folder}/BPA_net_rev_stoc_y{redux}.xlsx', sheet_name='ensemble' + str(e), usecols=['add_BA'])], axis = 1)
+        
+    ba_e2 = ba_e.copy()
+    add_ba_e.columns = ba_e.columns
+    ## first need to account for adding BA (which might be added even after it is used)
+    for i in range(1,len(ba_e)): 
+        ba_e2.iloc[i,:] = ba_e.iloc[i,:] - add_ba_e.iloc[i,:]
+        used_e.iloc[i,:] = ba_e2.iloc[i-1,:] - ba_e2.iloc[i,:]
+
+    used_e[used_e < 0] = 0
+                
+    used_e.fillna(0, inplace = True)
+    used_avg = used_e.mean(axis = 1)
+    
+    return used_e, used_avg 
+
 

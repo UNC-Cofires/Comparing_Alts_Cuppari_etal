@@ -40,7 +40,8 @@ def match_points_density(data, points):
 ## need to have TDA data to differentiate between dry/wet
 ##showing the distribution 
 ## if same plot just put them in subplots. Else, separate figures
-def density_scatter_plot(data, tda, points, same_plot = True, var = 95): 
+def density_scatter_plot(data, tda, points, same_plot = True, var = 95, 
+                         cvar = False, label_font = 14): 
     
     match_points_density(data, points)
     points['TDA flow'] = tda['TDA flow']
@@ -56,27 +57,45 @@ def density_scatter_plot(data, tda, points, same_plot = True, var = 95):
 ##need to hide the spine at some point
         #axs[c].kdeplot(np.array(data.iloc[:,c*2]))
         ##x = net rev, y = loc 
+            if cvar == True: 
+                var2 = np.quantile(points.iloc[:,c*2], (100-var)/100)
+                var_val = points.iloc[:,c*2][points.iloc[:,c*2] <= var2].mean()
+                
+            else: 
+                var_val = np.quantile(points.iloc[:,c*2], (100-var)/100)
+                
             axs[c].scatter(normal.iloc[:,c*2],normal.iloc[:,c*2+1],label='Normal',color="tab:blue",alpha=.6)
             axs[c].scatter(dry.iloc[:,c*2],dry.iloc[:,c*2+1],label='Dry',color="orange",alpha=.6) 
             axs[c].spines['top'].set_visible(False)
             axs[c].spines['right'].set_visible(False)
             axs[c].spines['left'].set_visible(False)
-            axs[c].set_ylabel(str(data.columns[c]),fontsize=18)
+            axs[c].set_ylabel(str(data.columns[c]), fontsize=label_font)
             axs[c].set_yticks([],[])
             axs[c].set_xticks([-600000000,-400000000,-200000000,0,200000000,400000000,600000000])
-            axs[c].set_xticklabels(['-600','-400','-200','0','200','400','600'],fontsize=20)
-            axs[c].set_xlim(-600000000,600000000)
+            axs[c].set_xticklabels(['-600','-400','-200','0','200','400','600'],fontsize=label_font)
+            axs[c].set_xlim(-600000000,635000000)
             axs[c].vlines(points.iloc[:,c*2].mean(), ymin=points.iloc[:,c*2+1].min(),
-                          ymax=points.iloc[:,c*2+1].max(), color="black", linewidth=4,
-                          linestyle='--', label = 'Mean Net Revenues')
-            axs[c].vlines(np.quantile(points.iloc[:,c*2], (100-var)/100), ymin=points.iloc[:,c*2+1].min(),
-                          ymax=points.iloc[:,c*2+1].max(),color="red",linewidth=4,
-                          linestyle='--', label = f'{var}% VaR')
+                          ymax=points.iloc[:,c*2+1].max(), color="black", 
+                          linewidth=4, linestyle='--', label = 'Mean Net Revenues')
+            
+            if cvar == False: 
+                axs[c].vlines(var_val, ymin = points.iloc[:,c*2+1].min(),
+                              ymax = points.iloc[:,c*2+1].max(), color="black",linewidth=2,
+                              linestyle='--', label = f'{var}% VaR')
+            else: 
+                axs[c].vlines(var_val, ymin = points.iloc[:,c*2+1].min(),
+                              ymax = points.iloc[:,c*2+1].max(), color="red",linewidth=4,
+                              linestyle='--', label = f'CVAR')
+
+            # ## add shading to indicate the expected shortfall area
+            # axs[c].axvspan(xmin = dry.iloc[:,c*2].min(), xmax = var_val, 
+            #                ymin = 0, ymax = points.iloc[:,c*2].mean(), 
+            #                color = 'red', alpha = 0.15, lw = 4)
             
             if c < rows-1: 
                 axs[c].spines['bottom'].set_visible(False)
                 axs[c].set_xticks([],[])
-                axs[c].legend(frameon = False, fontsize=14) 
+                axs[c].legend(frameon = False, fontsize = label_font-2) 
 #                axs[c].set_xlabel("Net Revenues ($M)", fontsize = 20)
 
     else: 
@@ -91,15 +110,17 @@ def density_scatter_plot(data, tda, points, same_plot = True, var = 95):
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
             ax.spines['left'].set_visible(False)
-            ax.set_ylabel(str(data.columns[c]),fontsize=18)
+            ax.set_ylabel(str(data.columns[c]), fontsize = label_font)
             ax.set_yticks([],[])
             ax.set_xticks([-600000000,-400000000,-200000000,0,200000000,400000000,600000000])
-            ax.set_xticklabels(['-600','-400','-200','0','200','400','600'],fontsize=20)
-            ax.set_xlim(-600000000,600000000)
-            ax.vlines(points.iloc[:,c*2].mean(),ymin=points.iloc[:,c*2+1].min(),ymax=points.iloc[:,c*2+1].max(),color="black",linewidth=4,linestyle='--')
-            ax.vlines(np.quantile(points.iloc[:,c*2],0.05),ymin=points.iloc[:,c*2+1].min(),ymax=points.iloc[:,c*2+1].max(),color="red",linewidth=4,linestyle='--')
-            ax.legend(frameon = False, fontsize=16)
-            ax.set_xlabel("Net Revenues ($)", fontsize = 18)
+            ax.set_xticklabels(['-600','-400','-200','0','200','400','600'], fontsize=label_font)
+            ax.set_xlim(-600000000,635000000)
+            ax.vlines(points.iloc[:,c*2].mean(),ymin=points.iloc[:,c*2+1].min(),ymax=points.iloc[:,c*2+1].max(),
+                      color="black",linewidth=4,linestyle='-')
+            ax.vlines(np.quantile(points.iloc[:,c*2],0.05),ymin=points.iloc[:,c*2+1].min(),
+                      ymax=points.iloc[:,c*2+1].max(),color="red",linewidth=4,linestyle='--')
+            ax.legend(frameon = False, fontsize = label_font)
+            ax.set_xlabel("Net Revenues ($)", fontsize = label_font)
            
                 
 def multiple_pdf(data, colors, var): 
