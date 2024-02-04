@@ -35,10 +35,11 @@ from sklearn import linear_model
 ## p2 = % pos net revenues used to repay BA (debt optimization)
 ## p = % pos net revenues used to replenish reserves
 ## repay_ba says whether or not there is a line of credit ("yes" or "no")
+sequences = pd.DataFrame(pd.read_csv("random_sequences.csv").iloc[:,1])
 
 def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y = 'AVERAGE', infinite = False, 
                         p = 10, p2 = 32, res_cap = 608691000, repay_ba = 'yes',
-                        ba_int_rate = 0.042, time_horizon = 50): ## default interest rate is from hist avg
+                        ba_int_rate = 0.042, time_horizon = 50, sequence = 'no'): ## default interest rate is from hist avg
     #Set Preference Customers reduction percent (number)
     
 
@@ -59,7 +60,11 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     BPA_hydro = pd.DataFrame(np.reshape(BPA_hydro.values, (365,1200), order='F'))
     BPA_hydro.drop([82, 150, 374, 377, 540, 616, 928, 940, 974, 980, 1129, 1191],axis=1, inplace=True)
         
-    BPA_hydro = pd.DataFrame(np.reshape(BPA_hydro.values, (365*1188), order='F'))
+    if len(sequence) > 1:
+        BPA_hydro.columns = np.arange(0, len(BPA_hydro.columns))
+        BPA_hydro = BPA_hydro.loc[:, sequences.iloc[:,0]]            
+
+    BPA_hydro = pd.DataFrame(np.reshape(BPA_hydro.values, (365*int(len(BPA_hydro.columns))), order='F'))    
     
     length = int(len(BPA_hydro)/365 + 1)
 
@@ -91,14 +96,24 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     BPAT_load.index=arr
     BPAT_load = BPAT_load.resample('D').mean()
     BPAT_load.drop([82, 150, 374, 377, 540, 616, 928, 940, 974, 980, 1129, 1191],axis=1, inplace=True)
-    BPAT_load = pd.DataFrame(np.reshape(BPAT_load.values, (365*1188), order='F'))
+    
+    if len(sequence) > 1:
+        BPAT_load.columns = np.arange(0, len(BPAT_load.columns))
+        BPAT_load = BPAT_load.loc[:, sequences.iloc[:,0]]  
+
+    BPAT_load = pd.DataFrame(np.reshape(BPAT_load.values, (365*int(len(BPAT_load.columns))), order='F'))
 
     df_synth_wind = pd.read_csv('CAPOW_data/wind_power_sim.csv', usecols=[1])
     BPAT_wind = pd.DataFrame(np.reshape(df_synth_wind.values, (24*365,1200), order='F'))
     BPAT_wind.index = arr
     BPAT_wind = BPAT_wind.resample('D').mean()
     BPAT_wind.drop([82, 150, 374, 377, 540, 616, 928, 940, 974, 980, 1129, 1191],axis=1, inplace=True)
-    BPAT_wind = pd.DataFrame(np.reshape(BPAT_wind.values, (365*1188), order='F'))
+    
+    if len(sequence) > 1:
+        BPAT_wind.columns = np.arange(0, len(BPAT_wind.columns))
+        BPAT_wind = BPAT_wind.loc[:, sequences.iloc[:,0]]  
+
+    BPAT_wind = pd.DataFrame(np.reshape(BPAT_wind.values, (365*int(len(BPAT_wind.columns))), order='F'))
 
     # Calculate daily BPAT proportions for demand and wind
     load_ratio = BPAT_load/BPAT_load.mean()
@@ -121,12 +136,22 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     # reshuffle 
 #    MidC[[0, 121, 826, 212]]=MidC[[826, 212, 0, 121]]
     MidC.drop([82, 150, 374, 377, 540, 616, 928, 940, 974, 980, 1129, 1191],axis=1, inplace=True)
-    MidC=pd.DataFrame(np.reshape(MidC.values, (365*1188), order='F'))
+    
+    if len(sequence) > 1:
+        MidC.columns = np.arange(0, len(MidC.columns))
+        MidC = MidC.loc[:, sequences.iloc[:,0]]  
+        
+    MidC=pd.DataFrame(np.reshape(MidC.values, (365*int(len(MidC.columns))), order='F'))
     
     CAISO=pd.read_csv('CAPOW_data/CAISO_daily_prices.csv').iloc[:, 1:]
     #reshuffle
 #    CAISO[['0', '121', '826', '212']]=CAISO[['826', '212', '0', '121']]
-    CAISO=pd.DataFrame(np.reshape(CAISO.values, (365*1188), order='F'))
+
+    if len(sequence) > 1:
+        CAISO.columns = np.arange(0, len(CAISO.columns))
+        CAISO = CAISO.loc[:, sequences.iloc[:,0]]  
+
+    CAISO = pd.DataFrame(np.reshape(CAISO.values, (365*len(CAISO.columns)), order='F'))
     
     Wholesale_Mkt=pd.concat([MidC,CAISO], axis=1)
     Wholesale_Mkt.columns=['MidC','CAISO']
@@ -143,9 +168,9 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     ##Calculate revenue
     start = pd.read_excel('net_rev_data.xlsx', sheet_name='res_ba')
 
-    start_res = start.loc[0, y]*pow(10,6)
+    start_res = 0#start.loc[0, y]*pow(10,6)
  
-    starting_BA = start.loc[2, y]*pow(10,9)
+    starting_BA = 0#start.loc[2, y]*pow(10,9)
 #    print('STARTING BA: ' + str(starting_BA))
     new_BA = 0 
        
@@ -182,7 +207,7 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     P = pd.DataFrame(index = SD.index)
     SS = pd.DataFrame(index = SD.index)
     Reserves = pd.DataFrame(index = np.arange(1, length))
-    Reserves.loc[1,0] = start_res
+    Reserves.loc[1,0] = 0 #start_res
     TF = pd.DataFrame(index = np.arange(1, length), columns=['TF1','TF2'])
     TF.loc[:,:] = 0
     repaid = pd.DataFrame(index = np.arange(1, length), columns=['repaid'])
@@ -196,10 +221,7 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     
     amortized = pd.DataFrame(index = np.arange(1, 21 + time_horizon), 
                              columns = [0]) ## will only use if p2 = 'all'
-    amortized.iloc[:,:] = 0 
-    amort_schedule = pd.DataFrame(index = np.arange(1, 21 + time_horizon)) 
-    amort_schedule.iloc[:,:] = 0 
-    
+
     CRAC = 0
     CRAC_y = pd.DataFrame(index = np.arange(1, length))
     CRAC_y.loc[:,0]=0
@@ -212,10 +234,6 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     Result_ensembles_y = {} 
     Result_ensembles_d = {} 
 
-    ## amortization set up
-    num = ba_int_rate * pow((1 + ba_int_rate), time_horizon) ## 30 = debt repayment time horizon
-    deno = pow((1 + ba_int_rate), time_horizon) - 1
-    
     e = 1 ## ensemble number
 
     
@@ -231,14 +249,14 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
             ## pull the rates month by month 
             RatePF = PF_rates[str(y)][PF_rates['month']==months[i,0]].values 
             ## when the tariff adjustment is triggered, add that on top of the monthly rate
-            RatePF += CRAC
+            #RatePF += CRAC
             ## revenues from each segment are load * the rate * 24 because 
             ## these are hourly 
             PF_rev.loc[i,0] = PF_load.loc[i,0]*RatePF*24
             
             ## same for industrial customers
             RateIP = IP_rates[str(y)][IP_rates['month']==months[i,0]].values 
-            RateIP += CRAC
+            #RateIP += CRAC
             IP_rev.loc[i,0] = IP_load.loc[i,0]*RateIP*24
             
             weight_PF = PF_load.loc[i,0]/(IP_load.loc[i,0] + PF_load.loc[i,0])
@@ -275,49 +293,8 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
                 bol = year%2 == 0 
                 PF_load_i = PF_load.iloc[(year-1)*365:year*365,0].sum()
                 IP_load_i = IP_load.iloc[(year-1)*365:year*365,0].sum()
-                tot_load_i = PF_load_i + IP_load_i
                 BPA_Net_rev_y.loc[year,0] = (BPA_rev_d.loc[i-364:i,0]).sum() + df_payout.iloc[year-1,0] - costs_y[year-1]
                 
-                ## when have negative net revenues
-                if BPA_Net_rev_y.loc[year,0] < 0:
-                    ## absolute value of losses
-                    losses = -BPA_Net_rev_y.loc[year,0]
-                    ## try to use reserves to cover it (Res avail - absolute(losses))
-                    Net_res1 = Reserves.loc[year,0] - losses
-                    
-                    ## reserves for next year set at 0 if all used or, 
-                    ## if there were enough reserves to cover document the remainder of reserves 
-                    Reserves.loc[year+1,0] = max(Net_res1, 0)
-                    res_add = 0
-#                    print(f'Remaining Reserves {year}: {Reserves.loc[year+1,0]}')
-                    
-                    ## when reserves < losses... 
-                    if int(Net_res1 < 0):
-                        ## the thus far uncovered losses are the difference
-                        BPA_Net_rev_y2.loc[year,0] = Net_res1 #BPA_Net_rev_y.loc[year,0] + Reserves.loc[year,0]
-                        ## make losses absolute number here again
-                        losses = -Net_res1    
-                        ## compensate for what the reserves cover 
-                        ## BUT, do want to add that to the costs for next year 
-                        ## because they don't just disappear into the night... 
-                        losses_to_pay = losses*(1 + nf_int_rate)
-                       # costs_y[year] += losses_to_pay
-                        
-                    else: 
-                        ## all losses covered, so set net rev to 0  
-                        BPA_Net_rev_y2.loc[year,0] = 0# BPA_Net_rev_y.loc[year,0] + losses           
-
-                        
-                            
-                else:## when net revs > 0 
-                    #
-                    Reserves.loc[year+1,0] = min(Reserves.loc[year,0] + 0.01*p*BPA_Net_rev_y.loc[year,0], \
-                                                 res_cap)  
-                    ## remove from net revenues whatever was contributed to reserves
-                    res_add = max(0, (Reserves.loc[year+1,0] - Reserves.loc[year,0]))
-              
-                 ## remove from NR whatever was added to reserves 
-                    BPA_Net_rev_y2.loc[year,0] = BPA_Net_rev_y.loc[year,0] - res_add #- repaid.loc[year, 'repaid']                    
              
                 if year%20 == 0:
                     Result_ensembles_y['ensemble' + str(e)] = pd.DataFrame(data= np.stack([Reserves.loc[year-19:year,0],TTP.loc[year-19:year,'TTP'],
@@ -347,9 +324,9 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
     print(name)
     print()
     print(f"mean NR1: {BPA_Net_rev_y.iloc[:,0].mean():,}")
-    print(f"mean NR2: {BPA_Net_rev_y2.iloc[:,0].mean():,}")
+    #print(f"mean NR2: {BPA_Net_rev_y2.iloc[:,0].mean():,}")
     print(f"95% VaR1: {np.percentile(BPA_Net_rev_y.iloc[:,0], 5):,}")
-    print(f"95% VaR2: {np.percentile(BPA_Net_rev_y2.iloc[:,0], 5):,}")
+#    print(f"95% VaR2: {np.percentile(BPA_Net_rev_y2.iloc[:,0], 5):,}")
 
 #Save results
     Results_d=pd.DataFrame(np.stack([BPA_rev_d[0],PF_rev[0],IP_rev[0],P[0],SS[0], \
@@ -371,17 +348,23 @@ def net_rev_full_inputs(df_payout, custom_redux = 0, name = '', excel = True, y 
                 Result_ensembles_y['ensemble' + str(e)].to_excel(writer, sheet_name='ensemble' + str(e))
             #costs_y.to_excel(writer,sheet_name='Costs_y')
 
+    if excel == 'long': 
+        SD.to_csv("Results//Long//SD_" + str(name) + '.csv')
+        SS.to_csv("Results//Long//SS_" + str(name) + '.csv')
+
+        CRAC_y.to_csv("Results//Long//CRAC_" + str(name) + '.csv')
+        repaid.to_csv("Results//Long//repaid_" + str(name) + '.csv')
+        Used_TF2.to_csv("Results//Long//used_tf2_" + str(name) + '.csv')
+        
     BPA_rev_d.to_csv('Results//daily_net_rev_'+str(name)+'.csv')
 
-    BPA_NR = pd.concat([BPA_Net_rev_y, BPA_Net_rev_y2], axis = 1)
-    BPA_NR.to_csv('Results//ann_net_rev_'+str(name)+'.csv')
-    
-    amort_schedule.to_csv('Results//amort_sched_'+str(name)+'.csv')
+#    BPA_NR = pd.concat([BPA_Net_rev_y, BPA_Net_rev_y2], axis = 1)
+    BPA_Net_rev_y.to_csv('Results//ann_net_rev_'+str(name)+'.csv')
 
 
-    return BPA_NR, repaid
+    return BPA_Net_rev_y, repaid
 
-df_payout = pd.DataFrame([0]*1189)
+df_payout = pd.DataFrame([0]*1189*10)
 bpa_wacc = pd.read_excel('../Hist_data/BPA_debt.xlsx', sheet_name = 'WAI')
 ba_int_rate = bpa_wacc[bpa_wacc['Name'] == 'US Treasury ']['Average'].values[0]
 nf_int_rate = bpa_wacc[bpa_wacc['Name'] == 'Non-federal Total']['Average'].values[0]
@@ -389,14 +372,16 @@ y = 'no_loc'
 repay_ba = 'no'
 infinite = False
 custom_redux = 0
-name = 'no_crac_no_capex'
-time_horizon = 'na'
+time_horizon = 50
+name = 'no_tools'
+
 
 nr_no_crac_no_loc, repay_no_crac_no_loc = net_rev_full_inputs(df_payout, custom_redux = 0, 
-                                              name = 'no_crac_no_capex_cheap', excel = True, 
+                                              name = 'no_tools_10k', excel = 'long',
                                               y = 'no_loc', repay_ba = 'no', 
                                               ba_int_rate = ba_int_rate, 
-                                              infinite = False)
+                                              infinite = False,
+                                              sequence = sequences)
 
 
 
