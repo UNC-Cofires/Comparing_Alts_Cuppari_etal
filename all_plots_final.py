@@ -53,34 +53,34 @@ color_ins = '#71AFE2'
 
 # annual net revenue results for strategies with and without full reserves
 # strategy 1
-nr_no_loc = pd.read_csv("Results/Long/ann_net_rev_" + no_loc_suff + ".csv").iloc[:, 2]
+nr_no_loc = pd.read_csv("Results/ann_net_rev_" + no_loc_suff + ".csv").iloc[:, 2]
 # strategies 2
-nr_loc0 = pd.read_csv("Results/Long/ann_net_rev_" + loc0_suff + ".csv").iloc[:, 2]
-nr_loc_all = pd.read_csv("Results/Long/ann_net_rev_" + loc_all_suff + ".csv").iloc[:, 2]
+nr_loc0 = pd.read_csv("Results/ann_net_rev_" + loc0_suff + ".csv").iloc[:, 2]
+nr_loc_all = pd.read_csv("Results/ann_net_rev_" + loc_all_suff + ".csv").iloc[:, 2]
 # strategy 3
-nr_ins = pd.read_csv("Results/Long/ann_net_rev_" + strike_suff + ".csv").iloc[:, 2]
+nr_ins = pd.read_csv("Results/ann_net_rev_" + strike_suff + ".csv").iloc[:, 2]
             
 # net payouts -- the min value (the only negative one) is the premium
 premium = -pd.read_csv("Results/net_payouts2" + '05cheap2.csv').iloc[:,1].min()
             
 # # CRAC
-crac_no_loc = pd.DataFrame(pd.read_csv("Results/Long/CRAC_" + no_loc_suff + ".csv").iloc[1:,1])
+crac_no_loc = pd.DataFrame(pd.read_csv("Results/CRAC_" + no_loc_suff + ".csv").iloc[1:,1])
 no_loc_crac = pd.DataFrame(np.reshape(crac_no_loc.values, (int(len(crac_no_loc)/20),20), order = 'F'))
 
-crac_loc0 = pd.DataFrame(pd.read_csv("Results/Long/CRAC_" + loc0_suff + ".csv").iloc[1:,1])
+crac_loc0 = pd.DataFrame(pd.read_csv("Results/CRAC_" + loc0_suff + ".csv").iloc[1:,1])
 loc0_crac = pd.DataFrame(np.reshape(crac_loc0.values, (int(len(crac_no_loc)/20),20), order = 'F'))
 
-crac_loc_all = pd.DataFrame(pd.read_csv("Results/Long/CRAC_" + loc_all_suff + ".csv").iloc[1:,1]) 
+crac_loc_all = pd.DataFrame(pd.read_csv("Results/CRAC_" + loc_all_suff + ".csv").iloc[1:,1]) 
 loc_all_crac = pd.DataFrame(np.reshape(crac_loc_all.values, (int(len(crac_no_loc)/20),20), order = 'F'))
 
-crac_ind = pd.DataFrame(pd.read_csv("Results/Long/CRAC_" + strike_suff + ".csv").iloc[1:,1])
+crac_ind = pd.DataFrame(pd.read_csv("Results/CRAC_" + strike_suff + ".csv").iloc[1:,1])
 ins_crac = pd.DataFrame(np.reshape(crac_ind.values, (int(len(crac_no_loc)/20),20), order = 'F'))
 
 ## repayment
-loc0_repaid = pd.DataFrame(pd.read_csv("Results/Long/repaid_" + loc0_suff + ".csv").iloc[1:,1]) 
+loc0_repaid = pd.DataFrame(pd.read_csv("Results/repaid_" + loc0_suff + ".csv").iloc[1:,1]) 
 loc0_repaid = pd.DataFrame(np.reshape(loc0_repaid.values, (20,int(len(crac_no_loc)/20)), order = 'F'))
 
-loc_all_repaid = pd.DataFrame(pd.read_csv("Results/Long/repaid_" + loc_all_suff + ".csv").iloc[:,1])
+loc_all_repaid = pd.DataFrame(pd.read_csv("Results/repaid_" + loc_all_suff + ".csv").iloc[:,1])
 loc_all_repaid = pd.DataFrame(np.reshape(loc_all_repaid.values, (20,int(len(crac_no_loc)/20)), order = 'F'))
 
 ###############################################################################
@@ -129,7 +129,7 @@ combined['ind_pred'] = pred_ind.copy()
 combined['diff'] = combined['outcome'] - pred_ind
 
 xmin = -800*pow(10, 6)
-xmax = 550*pow(10, 6)
+xmax = 650*pow(10, 6)
 hspan = abs(xmin)/(abs(xmin) + xmax)
 
 lab_font = 16
@@ -163,7 +163,7 @@ ax1.plot([xmin, 0], [xmin, 0], linestyle='-.', color='black',
           label='1:1 line')
 ax1.set_xlim(xmin, xmax)
 ax1.set_ylim(xmin, xmax)
-ax1.legend(fontsize=tick_font, frameon=False, loc='upper left')
+ax1.legend(fontsize=tick_font, frameon=False)#, loc='upper left')
 
 ax2.scatter(rev_above_index, pred_above, label='Normal/Wet Years',
             color='cornflowerblue', s=50, alpha=0.8)
@@ -406,9 +406,9 @@ pv_prem = pd.DataFrame(pv_opp_cost(money=np.repeat(premium, 20),
 # note: these should be the same because usage just based on reserves + raw NR (they are)
 # but can read them in regardless to check
 
-used_tf_all = pd.read_csv("Results//Long//used_tf2_" + loc_all_suff + '.csv').iloc[1:,1]
+used_tf_all = pd.read_csv("Results//used_tf2_" + loc_all_suff + '.csv').iloc[1:,1]
 used_tf_all = pd.DataFrame(np.reshape(used_tf_all.values,(20,int(len(crac_no_loc)/20)), order = 'F'))
-used_tf0 = pd.read_csv("Results//Long//used_tf2_" + loc0_suff + '.csv').iloc[1:,1]
+used_tf0 = pd.read_csv("Results//used_tf2_" + loc0_suff + '.csv').iloc[1:,1]
 used_tf0 = pd.DataFrame(np.reshape(used_tf0.values,(20,int(len(crac_no_loc)/20)), order = 'F'))
 
 held_tf0 = (750*pow(10, 6) - used_tf0).mean(axis=1)
@@ -462,13 +462,6 @@ remain_loc_all = (amort_all_pv1.iloc[-1,:] - amort_all_pv1.iloc[19,:]).mean()
 print(f"Remaining, Strategy 2a: {round(remain_loc0):,}")
 print(f"Remaining, Strategy 2b: {round(remain_loc_all):,}")
 print()
-
-###############################################################################
-################################# FIG 7 #######################################
-###############################################################################
-# one panel with cumulative costs, including reserves, CRAC, line of credit, etc
-# SUM TOTAL OF ALL COSTS OF RISK MANAGEMENT TO ALL PARTIES
-# cumulative costs
 
 ############## total costs of CRAC -- $$ adjustments * PF sales ###############
 loc_crac_all_ens = loc_all_crac.mean()
@@ -641,8 +634,10 @@ sum_loc_all_costs = pv_crac_costs_loc_all.iloc[:, 0] + \
 sum_ins_costs = pv_crac_costs_ins.iloc[:, 0] + \
     pv_prem.iloc[:, 0]  # + pv_res_ins.iloc[:,0]
 
+
 ###############################################################################
-#################### distinguishing by different party ########################
+################################# TABLE 3 #####################################
+###################  distinguishing by different party ########################
 
 tot_costs_bpa_no_loc = repaid[0]
 tot_costs_bpa_loc0 = repaid[1]
@@ -654,18 +649,18 @@ tot_costs_govt_loc0 = subs[1] + foregone[1] + opp_costs[1]
 tot_costs_govt_loc_all = subs[2] + foregone[2] + opp_costs[2]
 tot_costs_govt_ins = subs[3] + foregone[3]
 
-# to BPA
-print(f"Costs to BPA, Strategy 1:  {round(tot_costs_bpa_no_loc,-6):,}")
-print(f"Costs to BPA, Strategy 2a:  {round(tot_costs_bpa_loc0, -6):,}")
-print(f"Costs to BPA, Strategy 2b:  {round(tot_costs_bpa_loc_all, -6):,}")
-print(f"Costs to BPA, Strategy 3:  {round(tot_costs_bpa_ins, -6):,}")
-print()
-
 # to customers
 print(f"Costs to Customers, Strategy 1:  {round(cracs[0],-6):,}")
 print(f"Costs to Customers, Strategy 2a:  {round(cracs[1], -6):,}")
 print(f"Costs to Customers, Strategy 2b:  {round(cracs[2], -6):,}")
 print(f"Costs to Customers, Strategy 3:  {round(cracs[3], -6):,}")
+print()
+
+# to BPA
+print(f"Costs to BPA, Strategy 1:  {round(tot_costs_bpa_no_loc,-6):,}")
+print(f"Costs to BPA, Strategy 2a:  {round(tot_costs_bpa_loc0, -6):,}")
+print(f"Costs to BPA, Strategy 2b:  {round(tot_costs_bpa_loc_all, -6):,}")
+print(f"Costs to BPA, Strategy 3:  {round(tot_costs_bpa_ins, -6):,}")
 print()
 
 # to government
@@ -683,40 +678,54 @@ print(f"Strategy 2c Costs: {round(sum_loc_all_costs.iloc[-1],-6):,}")
 print(f"Strategy 3 Costs: {round(sum_ins_costs.iloc[-1],-6):,}")
 print()
 
-# average NR
-print(f"Strategy 0 Avg NR: {round(no_tools.mean(),-5):,}")
-print(f"Strategy 1 Avg NR: {round(nr_no_loc.mean(),-5):,}")
-print(f"Strategy 2a Avg NR: {round(nr_loc0.mean(),-1):,}")
-print(f"Strategy 2c Avg NR: {round(nr_loc_all.mean(),-1):,}")
-print(f"Strategy 3 Avg NR: {round(nr_ins.mean(),-5):,}")
-print()
+strats = pd.Series(['0. No Risk Risk Management', '1. Reserves + Surcharges', 
+          'Unlimited Line of Credit + Reserves + Surcharges', 
+          '2a. No Repayment', '2b. Full Repayment', 
+          '3. Index Insurance + Reserves + Surcharges'])
 
-# Expected Shortfalls
-print(
-    f"Expected Shortfall Strategy 0: ${no_tools[no_tools <= np.percentile(no_tools, 5)].mean():,}")
-print(
-    f"Expected Shortfall Strategy 1: ${nr_no_loc[nr_no_loc <= np.percentile(nr_no_loc, 5)].mean():,}")
-print(
-    f"Expected Shortfall Strategy 2a: ${nr_loc0[nr_loc0 <= np.percentile(nr_loc0, 5)].mean():,}")
-print(
-    f"Expected Shortfall Strategy 2b: ${nr_loc_all[nr_loc_all <= np.percentile(nr_loc_all, 5)].mean():,}")
-print(
-    f"Expected Shortfall Strategy 3: ${nr_ins[nr_ins <= np.percentile(nr_ins, 5)].mean():,}")
-print()
+tariff_surcharges = pd.Series([np.nan, 
+                     round(cracs[0],-6)/pow(10,6), 
+                     np.nan, 
+                     round(cracs[1], -6)/pow(10,6), 
+                     round(cracs[2], -6)/pow(10,6),
+                     round(cracs[3], -6)/pow(10,6)])
 
-# 95% VaR
-print(f"Strategy 0 95% VaR: {round(np.percentile(no_tools,5),-5):,}")
-print(f"Strategy 1 95% VaR: {round(np.percentile(nr_no_loc,5),-5):,}")
-print(f"Strategy 2a 95% VaR: {round(np.percentile(nr_loc0,5),-5):,}")
-print(f"Strategy 2c 95% VaR: {round(np.percentile(nr_loc_all,5),-5):,}")
-print(f"Strategy 3 95% VaR: {round(np.percentile(nr_ins,5),-5):,}")
-print()
-print()
+loc_prems = pd.Series([np.nan, 
+             round(tot_costs_bpa_no_loc,-6)/pow(10,6),
+             np.nan, 
+             round(tot_costs_bpa_loc0, -6)/pow(10,6),
+             round(tot_costs_bpa_loc_all, -6)/pow(10,6),
+             round(tot_costs_bpa_ins, -6)/pow(10,6)])
 
+foregone_oc = pd.Series([np.nan, 
+               round(tot_costs_govt_no_loc,-6)/pow(10,6),
+               np.nan,  
+               round(tot_costs_govt_loc0,-6)/pow(10,6), 
+               round(tot_costs_govt_loc_all, -6)/pow(10,6), 
+               round(tot_costs_govt_ins, -6)/pow(10,6)])
 
+avg_totals = pd.Series([np.nan, 
+               round(sum_no_loc_costs.iloc[-1],-6)/pow(10,6), 
+               np.nan, 
+               round(sum_loc0_costs.iloc[-1],-6)/pow(10,6),
+               round(sum_loc_all_costs.iloc[-1],-6)/pow(10,6),
+               round(sum_ins_costs.iloc[-1],-6)/pow(10,6)])
 
+table3 = pd.concat([strats, 
+                    tariff_surcharges, 
+                    loc_prems, 
+                    foregone_oc, 
+                    avg_totals], axis = 1)
+
+table3.to_csv(f"Results/table3_{discount}.csv")
 
 ###############################################################################
+############################ FIG 7: Cumulative costs ##########################
+###############################################################################
+# one panel with cumulative costs, including reserves, CRAC, line of credit, etc
+# SUM TOTAL OF ALL COSTS OF RISK MANAGEMENT TO ALL PARTIES
+# cumulative costs
+
 title_font = 10 
 label_font = 10
 tick_font = 12
@@ -724,13 +733,13 @@ leg_font = 12
 marker_font = 14
 
 fig, (ax3, ax5, ax1, ax2, ax4) = plt.subplots(nrows=5, sharex=True)
-plt.subplots_adjust(hspace=.3)
+#plt.subplots_adjust(hspace=.3)
 
 # A) Foregone repayment
 ax1.plot(foregone_expanding0.index, foregone_expanding0,
-         linestyle=':', linewidth=3, label='Strategy 2a', color = color_loc0)  
+         linestyle=':', linewidth=3, label='No Repayment', color = color_loc0)  
 ax1.plot(foregone_expanding_all.index, foregone_expanding_all, color = color_loc_all,
-         linestyle='--', linewidth=3, label='Strategy 2b')  # ', Expanding')
+         linestyle='--', linewidth=3, label='Maximum Repayment')  # ', Expanding')
 ax1.set_xlabel("Ensemble Year", fontsize=label_font)
 ax1.set_ylabel("Average Present Value, \nForegone Repayments \n($M)",
                fontsize=label_font)
@@ -744,9 +753,9 @@ ax1.legend(fontsize=leg_font, frameon=False, loc='upper left')
 
 # C) Opportunity Cost 
 ax5.plot(foregone_expanding0.index, opp_cost_tf_all.iloc[:,0],
-         linestyle='--', linewidth=3, label='Strategies 2a and 2b', color='#8B3D88')  
+         linestyle='--', linewidth=3, label='Line of Credit', color='#8B3D88')  
 ax5.plot(foregone_expanding_all.index, pv_prem.iloc[:,0], color=color_ins,#'#37A794',
-         linestyle='-.', linewidth=3, label='Strategy 3')  # ', Expanding')
+         linestyle='-.', linewidth=3, label='Index Insurance')  # ', Expanding')
 ax5.set_ylabel("Average Present Value, \nOpportunity Cost \n($M)",
                fontsize=label_font)
 ax5.set_yticks([0, 100*pow(10, 6), 200*pow(10, 6), 300*pow(10, 6), 400*pow(10, 6)],
@@ -756,11 +765,11 @@ ax5.set_xticks([0, 2, 4, 6, 8, 10, 12, 14, 16, 18],
                ['1', '3', '5', '7', '9', '11', '13',
                '15', '17', '19'], fontsize=tick_font)
 ax5.legend(fontsize=leg_font, frameon=False, loc='upper left')
-
+ax5.set_xlabel("Ensemble Year", fontsize=label_font)
 
 # B) Interest Rate Subsidy
 ax2.plot(interest_subsidy_nf0.index, interest_subsidy_nf0, linewidth=3,
-         color='#8B3D88', linestyle=':', label = 'Strategies 2a and 2b')#'a')
+         color='#8B3D88', linestyle=':')#'a')
 ## fully overlapping as lines on the page, so showing one ( <250k differences at all times)
 #ax2.plot(interest_subsidy_nf_all.index, interest_subsidy_nf_all, linewidth = 3,
 #         color = '#37A794', linestyle = '--', label = 'Strategy 2b')
@@ -774,6 +783,7 @@ ax2.set_xticks([0, 2, 4, 6, 8, 10, 12, 14, 16, 18],
 ax2.set_yticks([0, 8*pow(10, 6), 16*pow(10,6), 24*pow(10, 6)],
                ['0', '8', '16','24'], fontsize = tick_font)#'5', '10', '15', '20'], fontsize=tick_font)
 ax2.legend(fontsize=leg_font, frameon=False, loc='upper left')
+ax2.set_xlabel("Ensemble Year", fontsize=label_font)
 
 # C) mean CRAC * load
 ax3.plot(pv_crac_costs_no_loc.index, pv_crac_costs_no_loc, label='Strategy 1',
@@ -813,7 +823,7 @@ ax4.set_yticks([0, 200*pow(10, 6),
                ['0', '200', '400', '600'], fontsize=tick_font)
 
 ###########################################################################
-######################## Fig 8: Cost Range ################################
+######################## FIG 8: Cost Range ################################
 ###########################################################################
 # Strategy 1
 sum_no_loc_costs2 = pv_crac_no_loc2
@@ -839,6 +849,11 @@ pv_prem2 = pd.concat([pv_prem]*590, axis=1)
 pv_prem2.columns = pv_crac_ins2.columns
 sum_ins_costs2 = pv_crac_ins2 + \
     pv_prem2
+
+sum_no_loc_costs2.to_csv(f"Results/sum_no_loc_costs2_{discount}.csv")
+sum_loc0_costs2.to_csv(f"Results/sum_loc0_costs2_{discount}.csv")
+sum_loc_all_costs2.to_csv(f"Results/sum_loc_all_costs2_{discount}.csv")
+sum_ins_costs2.to_csv(f"Results/sum_ins_costs2_{discount}.csv")
 
 label_font = 14
 tick_font = 14
@@ -941,7 +956,8 @@ print(f"Minimum 2a: {int(sum_loc0_costs2.iloc[-1,:].min()):,}, Maximum 2a: {int(
 print(f"Minimum 2b: {int(sum_loc_all_costs2.iloc[-1,:].min()):,}, Maximum 2b: {int(sum_loc_all_costs2.iloc[-1,:].max()):,}")
 print(f"Minimum 3: {int(sum_ins_costs2.iloc[-1,:].min()):,}, Maximum 3: {int(sum_ins_costs2.iloc[-1,:].max()):,}")
 
-
+###############################################################################
+############################### TABLE 2 #######################################
 ###############################################################################
 
 # CRAC mean values
@@ -963,23 +979,110 @@ pct_ens_ind = (ins_crac.max(axis=1) > 0).sum()/len(no_loc_crac)
 print(f"Strategy 1 CRAC mean: {round((no_loc_crac_mean),4)}")
 print(
     f"Strategy 1 CRAC as % of PF prices: {round((no_loc_crac_mean/PF.mean().mean())*100,2)}%")
-print(f"Strategy 1 Ensembles with CRAC: {round(pct_ens_no_loc*100,0)}%")
-print()
 
 print(f"Strategy 2a CRAC mean: {round((loc0_crac_mean),4)}")
 print(
     f"Strategy 2a CRAC as % of PF prices: {round((loc0_crac_mean/PF.mean().mean())*100,2)}%")
-print(f"Strategy 2a Ensembles with CRAC: {round(pct_ens_loc0*100,0)}%")
-print()
 
 print(f"Strategy 2b CRAC mean: {round((loc_all_crac_mean),4)}")
 print(
     f"Strategy 2b CRAC as % of PF prices: {round((loc_all_crac_mean/PF.mean().mean())*100,2)}%")
-print(f"Strategy 2b Ensembles with CRAC: {round(pct_ens_loc_all*100,0)}%")
-print()
 
 print(f"Strategy 3 CRAC mean: {round((ins_crac_mean),4)}")
+
 print(
     f"Strategy 3 CRAC as % of PF prices: {round((ins_crac_mean/PF.mean().mean())*100,2)}%")
-print(f"Strategy 3 Ensembles with CRAC: {round(pct_ens_ind*100,0)}%")
 print()
+
+print(f"Strategy 1 Ensembles with CRAC: {round(pct_ens_no_loc*100,0)}%")
+print(f"Strategy 2a Ensembles with CRAC: {round(pct_ens_loc0*100,0)}%")
+print(f"Strategy 2b Ensembles with CRAC: {round(pct_ens_loc_all*100,0)}%")
+print(f"Strategy 3 Ensembles with CRAC: {round(pct_ens_ind*100,0)}%")
+
+# average NR
+print(f"Strategy 0 Avg NR: {round(no_tools.mean(),-5):,}")
+print(f"Strategy 1 Avg NR: {round(nr_no_loc.mean(),-5):,}")
+print(f"Strategy 2a Avg NR: {round(nr_loc0.mean(),-1):,}")
+print(f"Strategy 2c Avg NR: {round(nr_loc_all.mean(),-1):,}")
+print(f"Strategy 3 Avg NR: {round(nr_ins.mean(),-5):,}")
+print()
+
+# Expected Shortfalls
+print(
+    f"Expected Shortfall Strategy 0: ${no_tools[no_tools <= np.percentile(no_tools, 5)].mean():,}")
+print(
+    f"Expected Shortfall Strategy 1: ${nr_no_loc[nr_no_loc <= np.percentile(nr_no_loc, 5)].mean():,}")
+print(
+    f"Expected Shortfall Strategy 2a: ${nr_loc0[nr_loc0 <= np.percentile(nr_loc0, 5)].mean():,}")
+print(
+    f"Expected Shortfall Strategy 2b: ${nr_loc_all[nr_loc_all <= np.percentile(nr_loc_all, 5)].mean():,}")
+print(
+    f"Expected Shortfall Strategy 3: ${nr_ins[nr_ins <= np.percentile(nr_ins, 5)].mean():,}")
+print()
+
+# 95% VaR
+print(f"Strategy 0 95% VaR: {round(np.percentile(no_tools,5),-5):,}")
+print(f"Strategy 1 95% VaR: {round(np.percentile(nr_no_loc,5),-5):,}")
+print(f"Strategy 2a 95% VaR: {round(np.percentile(nr_loc0,5),-5):,}")
+print(f"Strategy 2c 95% VaR: {round(np.percentile(nr_loc_all,5),-5):,}")
+print(f"Strategy 3 95% VaR: {round(np.percentile(nr_ins,5),-5):,}")
+print()
+print()
+
+avg_nrs = pd.Series ([round(no_tools.mean()/pow(10,6)),
+                      round(nr_no_loc.mean()/pow(10,6)),
+                      np.nan, 
+                      round(nr_loc0.mean()/pow(10,6)), 
+                      round(nr_loc_all.mean()/pow(10,6)), 
+                      round(nr_ins.mean()/pow(10,6))])
+
+cvars = pd.Series([round(no_tools[no_tools <= np.percentile(no_tools, 5)].mean()/pow(10,6)),
+                    round(nr_no_loc[nr_no_loc <= np.percentile(nr_no_loc, 5)].mean()/pow(10,6)),
+                    np.nan,
+                    round(nr_loc0[nr_loc0 <= np.percentile(nr_loc0, 5)].mean()/pow(10,6)),
+                    round(nr_loc_all[nr_loc_all <= np.percentile(nr_loc_all, 5)].mean()/pow(10,6)),
+                    round(nr_ins[nr_ins <= np.percentile(nr_ins, 5)].mean()/pow(10,6))])
+
+ens_crac_pcts = pd.Series([np.nan, 
+                        round(pct_ens_no_loc*100),
+                        np.nan, 
+                        round(pct_ens_loc0*100),
+                        round(pct_ens_loc_all*100), 
+                        round(pct_ens_ind*100)])
+
+mean_surcharge = pd.Series([np.nan, 
+                            
+                            [round((no_loc_crac_mean),2),
+                             round((no_loc_crac_mean/PF.mean().mean())*100,2)],
+                            
+                            np.nan, 
+                            
+                            [round((loc0_crac_mean),2),
+                             round((loc0_crac_mean/PF.mean().mean())*100,2)],
+                            
+                            [round((loc_all_crac_mean),2),
+                             round((loc_all_crac_mean/PF.mean().mean())*100,2)],
+                            
+                            [round((ins_crac_mean),4),
+                             round((ins_crac_mean/PF.mean().mean())*100,2)]
+                            
+                            ])
+
+table2 = pd.concat([strats, 
+                    avg_nrs, 
+                    cvars,
+                    ens_crac_pcts,
+                    mean_surcharge], axis = 1)
+
+
+
+
+
+
+
+
+
+
+
+
+
