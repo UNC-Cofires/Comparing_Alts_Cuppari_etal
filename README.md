@@ -1,6 +1,6 @@
 # BPA Net Revenue Model
  
-This repository contains the materials for simulating the annual net revenues of the Bonneville Power Administration as well as for identifying instruments to manage their weather-related financial risk. Data to run these files can be found in a Zenodo repository (https://doi.org/10.5281/zenodo.10565800).
+This repository contains the materials for simulating the annual net revenues of the Bonneville Power Administration as well as for identifying instruments to manage their weather-related financial risk. Data to run these files can be found in a Zenodo repository (https://doi.org/10.5281/zenodo.14816798).
 
 The materials herein are the products of researchers at the Center on Financial Risk in Environmental Systems at UNC Chapel Hill, now known as the Institute on Risk Management and Insurance Innovation. Dr. Simona Denaro (former post-doc) designed and validated the original net revenue model for BPA in order to characterize BPA's financial risk (original model accessible at https://github.com/S-Denaro/BPA_Busi_Op/tree/main, and publication available at https://doi.org/10.1061/(ASCE)WR.1943-5452.0001590). 
 
