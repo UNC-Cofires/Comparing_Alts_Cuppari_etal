@@ -13,13 +13,12 @@ import numpy as np
 ############################ FIG. 1: AUTOCORRELATIONS #########################
 ###############################################################################
 
-tda = pd.read_csv("CAPOW_data/TDA6ARF_daily.csv")
+tda = pd.read_csv("Hist_data/TDA6ARF_daily.csv")
 tda['date'] = pd.to_datetime(tda.iloc[:,0])
 tda['year'] = tda['date'].dt.year
 ann_tda = tda.groupby('year').mean()
-ann_tda = ann_tda[ann_tda.index >= 1935]
 
-hist_temp = pd.read_csv("CAPOW_data/all_hist_temp_wind.csv")
+hist_temp = pd.read_csv("Hist_data/all_hist_temp_wind.csv")
 seattle = hist_temp[hist_temp['NAME'] == 'SEATTLE TACOMA INTERNATIONAL AIRPORT, WA US']
 boise = hist_temp[hist_temp['NAME'] == 'BOISE AIR TERMINAL, ID US']
 
@@ -316,11 +315,40 @@ axs[1,3].set_ylim(0, 1500*pow(10, 6))
 ###############################################################################
  
 ## combination of the following data
+## drop the first 'unnamed' row
 ## discount 0%
-table3_disc0 = pd.read_csv("Results/table3_0.csv")
+table3_disc0 = pd.read_csv("Results/table3_0.csv").iloc[:,1:]
 
 ## discount 5% 
-table3_disc5 = pd.read_csv("Results/table3_5.csv")
+table3_disc5 = pd.read_csv("Results/table3_5.csv").iloc[:,1:]
+
+full_sm_table3 = pd.DataFrame(index = table3_disc0.index, 
+                              columns = table3_disc0.columns)
+
+for col in table3_disc0.columns[1:]:
+    print(col)
+    for row in table3_disc0.index:
+        full_sm_table3.loc[row, col] = f"{table3_disc0.loc[row,col]}, {table3_disc5.loc[row,col]}"
+
+full_sm_table3.iloc[:,0] = table3_disc0.iloc[:,0]
+full_sm_table3.columns = ['Strategy', 
+                          'Tariff Surcharge Costs (BPA Customers) ($)', 
+                          'Line of Credit Repayments and Insurance Premiums (BPA) ($M)',
+                          'Foregone Repayments and Opportunity Cost (Government and Taxpayers) ($M)', 
+                          'Average Total Cost ($M)']
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

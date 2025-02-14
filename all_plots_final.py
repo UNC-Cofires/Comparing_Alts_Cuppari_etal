@@ -107,8 +107,8 @@ hist_rev.columns = ['year', 'outcome']
 hist_rev['outcome'] = hist_rev['outcome']*pow(10, 3)
 
 # now let's get streamflow at relevant dams
-tda = pd.read_csv("../Hist_data/TDA6ARF_daily.csv")
-midc = pd.read_excel("../Hist_data/MidC_yearly_01_21.xlsx")
+tda = pd.read_csv("Hist_data/TDA6ARF_daily.csv")
+midc = pd.read_excel("Hist_data/MidC_yearly_01_21.xlsx")
 midc.columns = ['date', 'midc']
 
 tda['year'] = pd.to_datetime(tda['date']).dt.year
@@ -227,7 +227,7 @@ res = np.array(res_ba.loc[2010:2021, 'start_res'])
 res = pd.to_numeric(res)
 
 # historical repayment
-repaid = pd.read_excel('BPA_Historical_Data/Debt/BPA_debt.xlsx', sheet_name='Repayment',
+repaid = pd.read_excel('Hist_data/BPA_debt.xlsx', sheet_name='Repayment',
                        usecols=[0, 8, 9, 10, 11, 12, 13, 14, 15, 16]).iloc[0:4, :]
 repaid.set_index('Unnamed: 0', inplace=True)
 repaid2 = repaid.T
@@ -247,7 +247,7 @@ crac.replace('n', 0, inplace=True)
 crac[2000] = 0
 
 # remove years that don't have both us treasury wacc + non-federal
-bpa_wacc = pd.read_excel('../Hist_data/BPA_debt.xlsx', sheet_name='WAI')
+bpa_wacc = pd.read_excel('Hist_data/BPA_debt.xlsx', sheet_name='WAI')
 bpa_wacc = bpa_wacc[(bpa_wacc['Name'] == 'Non-federal Total') | (bpa_wacc['Name'] == 'US Treasury ') |
                     (bpa_wacc['Name'] == 'Federal Spread') | (bpa_wacc['Name'] == 'Treasury Spread') |
                     (bpa_wacc['Name'] == 'Federal appropriations')]
@@ -296,7 +296,7 @@ plt.setp(axs[0].get_xticklabels(), visible=True)
 
 # read in relevant inputs
 fcrps = pd.read_csv("CAPOW_data/Synthetic_streamflows_FCRPS.csv").iloc[:, 1:]
-names = pd.read_excel("CAPOW_data//BPA_name.xlsx")
+names = pd.read_excel("CAPOW_data/BPA_name.xlsx")
 fcrps.columns = names.iloc[0, :]
 
 years = pd.DataFrame(np.arange(0, 1200))
@@ -332,22 +332,28 @@ all_data = pd.concat([no_tools, nr_no_loc, nr_loc0, \
                      nr_loc_all, nr_ins, \
                      tda['TDA flow']], axis=1)
 
+
+## these column names are shorthand that are edited in Adobe Illustrator 
+## translation: 
+## 'no_tools' = 'No Risk Management'
+## 'no_loc'   = 'Reserves + Tariff Surcharges'
+## 'LOC0'     = 'Credit, No Repayment'
+## 'LOC_all'  = 'Credit, Full Repayment'
+## 'ins'      = 'Insurance'
+
+## 'TDA flow' is required to distinguish between dry years and wet years 
+
 all_data.columns = ['no_tools', 'no_loc', 'LOC0', \
                     'LOC_all', 'ins', \
                     'TDA flow']
-#all_data.dropna(inplace=True)
-
-slim = all_data[['no_tools', 'no_loc', 'LOC0', \
-                 'LOC_all', 'ins', \
-                 'TDA flow']]
 
 full_cols = [['no_tools', 'none1', 'no_loc', 'none', 'LOC0', 'LOC0x', \
              'LOC_all', 'all_x', 'ins', 'insx', \
               'TDA flow']]
 
-points = pd.DataFrame(index=slim.index, columns=full_cols)
+points = pd.DataFrame(index = all_data.index, columns = full_cols)
 
-density_scatter_plot(slim, tda, points, same_plot=True, var=95, 
+density_scatter_plot(all_data, tda, points, same_plot=True, var=95, 
                      cvar = False, label_font=14)
 
 ###############################################################################
@@ -356,7 +362,7 @@ density_scatter_plot(slim, tda, points, same_plot=True, var=95,
 
 #################### calculate the pv/value differences #######################
 # need to read in rates to calculate pv
-t_rates = pd.read_csv('../Hist_data/bonds_20year.csv')
+t_rates = pd.read_csv('Hist_data/bonds_20year.csv')
 t_rates['date'] = pd.to_datetime(t_rates['DATE'])
 t_rates['year'] = t_rates['date'].dt.year
 t_rates = t_rates[['year', 'DGS20']]
@@ -436,18 +442,18 @@ def read_amort(redux, rate=rates_tr, discount=discount, time_horizon=time_horizo
 
 ##############
 # Strategy 2a (nf = non-federal rate, to use as point of comparison for interest rate sub)
-amort0, amort0_pv1 = read_amort(loc0_suff, folder = 'Results/Long')
+amort0, amort0_pv1 = read_amort(loc0_suff, folder = 'Results')
 amort0_pv = amort0_pv1.iloc[:20, :].mean(axis=1)
 
-amort0_nf, amort0_pv_nf1 = read_amort('loc0_repay_nf_10k', folder = 'Results/Long')
+amort0_nf, amort0_pv_nf1 = read_amort('loc0_repay_nf_10k', folder = 'Results')
 amort0_pv_nf = amort0_pv_nf1.iloc[:20, :].mean(axis=1)
 
 ##############
 # Strategy 2b
-amort_all, amort_all_pv1 = read_amort(loc_all_suff, folder = 'Results/Long')
+amort_all, amort_all_pv1 = read_amort(loc_all_suff, folder = 'Results')
 amort_all_pv = amort_all_pv1.iloc[:20, :].mean(axis=1)
 
-amort_all_nf, amort_all_pv_nf1 = read_amort('loc_all_repay_nf_10k', folder = 'Results/Long')
+amort_all_nf, amort_all_pv_nf1 = read_amort('loc_all_repay_nf_10k', folder = 'Results')
 amort_all_pv_nf = amort_all_pv_nf1.iloc[:20, :].mean(axis=1)
 
 (amort_all_pv - amort_all_pv_nf).iloc[-1]
@@ -565,7 +571,7 @@ foregone_expanding_all2 = amort_all_pv1.iloc[:20,:] - pv_repaid_loc_loc_all
 ########################## interest rate subsidy ##############################
 # these are different because you may defer more/less based on
 # how much is repaid
-bpa_wacc = pd.read_excel('../Hist_data/BPA_debt.xlsx', sheet_name='WAI')
+bpa_wacc = pd.read_excel('Hist_data/BPA_debt.xlsx', sheet_name='WAI')
 ba_int_rate = bpa_wacc[bpa_wacc['Name'] == 'US Treasury ']['Average'].values[0]
 nf_int_rate = bpa_wacc[bpa_wacc['Name'] ==
                        'Non-federal Total']['Average'].values[0]
@@ -891,44 +897,44 @@ ax1.set_xlabel("Ensemble Year", fontsize=label_font)
 ax1.set_xticks([0, 4, 9, 14, 19],
                 ['1', '5', '10', '15', '20'], fontsize=tick_font)
 ax1.set_yticks([0, 250*pow(10, 6), 500*pow(10, 6),
-                750*pow(10, 6), 1000*pow(10, 6), 1250*pow(10, 6), 1500*pow(10, 6)],
-                ['0', '250', '500', '750', '1000', '1250', '1500'],
+                750*pow(10, 6), 1000*pow(10, 6), 1250*pow(10, 6)],
+                ['0', '250', '500', '750', '1000', '1250'],
                 fontsize=tick_font)
 #ax1.set_ylim(0, 1250*pow(10, 6))
-ax1.set_ylim(0, 1500*pow(10, 6))
+ax1.set_ylim(0, 1250*pow(10, 6))
 
 ax2.legend(fontsize=leg_font, frameon=False, loc = 'upper left')
 ax2.set_xlabel("Ensemble Year", fontsize=label_font)
 ax2.set_xticks([0, 4, 9, 14, 19],
                ['1', '5', '10', '15', '20'], fontsize=tick_font)
 ax2.set_yticks([0, 250*pow(10, 6), 500*pow(10, 6),
-                750*pow(10, 6), 1000*pow(10, 6), 1250*pow(10, 6), 1500*pow(10, 6)],
-                ['0', '250', '500', '750', '1000', '1250', '1500'],
+                750*pow(10, 6), 1000*pow(10, 6), 1250*pow(10, 6)],
+                ['0', '250', '500', '750', '1000', '1250'],
                 fontsize=tick_font)
 #ax2.set_ylim(0, 1250*pow(10, 6))
-ax2.set_ylim(0, 1500*pow(10, 6))
+ax2.set_ylim(0, 1250*pow(10, 6))
 
 ax4.legend(fontsize=leg_font, frameon=False, loc = 'upper left')
 ax4.set_xlabel("Ensemble Year", fontsize=label_font)
 ax4.set_xticks([0, 4, 9, 14, 19],
                ['1', '5', '10', '15', '20'], fontsize=tick_font)
 ax4.set_yticks([0, 250*pow(10, 6), 500*pow(10, 6),
-                750*pow(10, 6), 1000*pow(10, 6), 1250*pow(10, 6), 1500*pow(10, 6)],
-                ['0', '250', '500', '750', '1000', '1250', '1500'],
+                750*pow(10, 6), 1000*pow(10, 6), 1250*pow(10, 6)],
+                ['0', '250', '500', '750', '1000', '1250'],
                 fontsize=tick_font)
 #ax4.set_ylim(0, 1250*pow(10, 6))
-ax4.set_ylim(0, 1500*pow(10, 6))
+ax4.set_ylim(0, 1250*pow(10, 6))
 
 ax5.legend(fontsize=leg_font, frameon=False, loc = 'upper left')
 ax5.set_xlabel("Ensemble Year", fontsize=label_font)
 ax5.set_xticks([0, 4, 9, 14, 19],
                ['1', '5', '10', '15', '20'], fontsize=tick_font)
 ax5.set_yticks([0, 250*pow(10, 6), 500*pow(10, 6),
-                750*pow(10, 6), 1000*pow(10, 6), 1250*pow(10, 6), 1500*pow(10, 6)],
-                ['0', '250', '500', '750', '1000', '1250', '1500'],
+                750*pow(10, 6), 1000*pow(10, 6), 1250*pow(10, 6)],
+                ['0', '250', '500', '750', '1000', '1250'],
                 fontsize=tick_font)
 #ax5.set_ylim(0, 1250*pow(10, 6))
-ax5.set_ylim(0, 1500*pow(10, 6))
+ax5.set_ylim(0, 1250*pow(10, 6))
 
 print("Min/max CRACs:")
 print(f"Strategy 1: {pv_crac_no_loc2.iloc[-1,:].min()}; {int(pv_crac_no_loc2.iloc[-1,:].max()):,}")

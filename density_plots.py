@@ -54,9 +54,6 @@ def density_scatter_plot(data, tda, points, same_plot = True, var = 95,
         fig,axs = plt.subplots(rows,1,sharex=True)
     
         for c in range(0,rows):     
-##need to hide the spine at some point
-        #axs[c].kdeplot(np.array(data.iloc[:,c*2]))
-        ##x = net rev, y = loc 
             if cvar == True: 
                 var2 = np.quantile(points.iloc[:,c*2], (100-var)/100)
                 var_val = points.iloc[:,c*2][points.iloc[:,c*2] <= var2].mean()
@@ -86,18 +83,18 @@ def density_scatter_plot(data, tda, points, same_plot = True, var = 95,
                 axs[c].vlines(var_val, ymin = points.iloc[:,c*2+1].min(),
                               ymax = points.iloc[:,c*2+1].max(), color="red",linewidth=4,
                               linestyle='--', label = f'CVAR')
-
-            # ## add shading to indicate the expected shortfall area
-            # axs[c].axvspan(xmin = dry.iloc[:,c*2].min(), xmax = var_val, 
-            #                ymin = 0, ymax = points.iloc[:,c*2].mean(), 
-            #                color = 'red', alpha = 0.15, lw = 4)
-            
             if c < rows-1: 
                 axs[c].spines['bottom'].set_visible(False)
                 axs[c].set_xticks([],[])
-                axs[c].legend(frameon = False, fontsize = label_font-2) 
+## no legend or label unless it's the first row
+#                axs[c].legend(frameon = False, fontsize = label_font-2) 
 #                axs[c].set_xlabel("Net Revenues ($M)", fontsize = 20)
-
+            if c == 0: 
+                    axs[c].legend(frameon = False, fontsize = label_font-2, 
+                                  loc = 'upper right')
+        if c == rows-1: 
+                axs[c].set_xlabel("Net Revenues ($M)", fontsize = label_font+2)
+    
     else: 
         for c in range(0,rows):     
 ##need to hide the spine at some point
@@ -121,7 +118,7 @@ def density_scatter_plot(data, tda, points, same_plot = True, var = 95,
                       ymax=points.iloc[:,c*2+1].max(),color="red",linewidth=4,linestyle='--')
             ax.legend(frameon = False, fontsize = label_font)
             ax.set_xlabel("Net Revenues ($)", fontsize = label_font)
-           
+
                 
 def multiple_pdf(data, colors, var): 
     rows = int((len(data.columns)))
